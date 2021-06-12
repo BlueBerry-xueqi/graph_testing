@@ -51,12 +51,22 @@ class Net(torch.nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = Net(hidden_channels=64, num_layers=64, alpha=0.1, theta=0.5,
             shared_weights=True, dropout=0.6).to(device)
+for (name, module) in model.named_modules():
+    print(name)
+
+exit(0)
 data = data.to(device)
 optimizer = torch.optim.Adam([
     dict(params=model.convs.parameters(), weight_decay=0.01),
     dict(params=model.lins.parameters(), weight_decay=5e-4)
 ], lr=0.01)
 
+
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook
 
 def train():
     model.train()
