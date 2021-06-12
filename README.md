@@ -27,3 +27,11 @@
 - Graph Classification
 - Node Classification
 - Link Prediction
+
+## To implement Test Metrics
+
+- LSA/DSA
+- NC
+- DeepGini
+- MCP
+- CES
