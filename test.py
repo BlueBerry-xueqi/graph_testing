@@ -1,5 +1,5 @@
 from numpy import mod
-from models.gin import Net, construct_model
+from models.gin import train_and_save, construct_model
 import torch
 from torch_geometric.transforms import OneHotDegree
 from torch_geometric.datasets import TUDataset
@@ -7,15 +7,14 @@ from torch_geometric.data import DataLoader
 import os.path as osp
 from test_metrics import sa
 
+model_data_path="saved_model/gin_imdb_binary/"
+#train_and_save(savedpath=model_data_path)
+
 device = torch.device( "cuda:0" if torch.cuda.is_available()else "cpu" )
-model = construct_model(device)
+model = construct_model(device, savedpath=model_data_path)
 
 path = osp.join('data', 'TU')
-dataset = TUDataset(path, name='IMDB-BINARY', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
-dataset = dataset.shuffle()
-train_size = int(len(dataset)*0.8)
-test_size = len(dataset) - train_size
-train_dataset, test_dataset = torch.utils.data.random_split( dataset, [train_size, test_size], generator=torch.Generator().manual_seed(0))
+train_dataset, test_dataset = torch.load(f"{model_data_path}/train.pt"),torch.load(f"{model_data_path}/test.pt")
 test_loader = DataLoader(test_dataset, batch_size=128)
 train_loader = DataLoader(train_dataset, batch_size=128)
 

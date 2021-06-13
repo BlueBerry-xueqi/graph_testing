@@ -77,7 +77,7 @@ class SA_Model():
             for layer_name in self.activation.keys():
                 #print(self.activation[layer_name].shape)
                 imout = self.pool(self.activation[layer_name], data.batch)
-                print(imout.shape)
+                #print(imout.shape)
                 extracted_layers_outputs[layer_name].append(imout)
         
         pre = torch.cat( pre, dim = 0)
@@ -281,8 +281,8 @@ def fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, 
             a_dot, train_ats[list(set(all_idx) - set(class_matrix[label]))]
         )
         dsa.append(a_dist / b_dist)
-    del target_ats, train_ats, train_pred, target_pred
-    return dsa
+    del target_ats, train_ats, train_pred
+    return dsa, target_pred
 
 
 def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs):
@@ -323,8 +323,8 @@ def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_n
             at, train_ats, class_matrix,label
         )
         dsa.append((b_dist-a_dist) /np.max([a_dist, b_dist]) )
-    del target_ats, train_ats, train_pred, target_pred
-    return dsa
+    del target_ats, train_ats, train_pred
+    return dsa, target_pred
 
 def find_min_at(at, train_ats, class_matrix,label):
     vmin = None
@@ -379,7 +379,7 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
         kdes = {}
         for label in tqdm(range(kwargs['num_classes']), desc="kde"):
                 refined_ats = np.transpose(train_ats[class_matrix[label]])
-                print(refined_ats.shape)
+                #print(refined_ats.shape)
                 #s = refined_ats.shape
                 refined_ats = np.delete(refined_ats, removed_cols, axis=0)
                 #print("Org Shape {}, delete {}".format(s, refined_ats.shape))
@@ -452,8 +452,8 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
        kde = kdes[0]
        for at in tqdm(target_ats):
            lsa.append(_get_lsa(kde, at, removed_cols))
-    del target_ats, train_ats,train_pred, target_pred, kdes
-    return lsa
+    del target_ats, train_ats,train_pred,  kdes
+    return lsa,target_pred
 
 
 def get_sc(lower, upper, k, sa):

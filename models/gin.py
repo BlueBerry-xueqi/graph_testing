@@ -8,7 +8,7 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import GINConv, global_add_pool
 
-from .pytorchtools import EarlyStopping,save_model_layer_bame
+from models.pytorchtools import EarlyStopping,save_model_layer_bame
 
 class Net(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers):
@@ -47,36 +47,39 @@ class Net(torch.nn.Module):
     def compute(self, data):
         return self.forward(data.x, data.edge_index, data.batch)
 
-def construct_model(device):
+def construct_model(device, savedpath):
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     dataset = TUDataset(path, name='IMDB-BINARY', transform=OneHotDegree(135))
     model = Net(dataset.num_features, 64*4*2, dataset.num_classes, num_layers=5)
     print("Load Model Weights")
-    model.load_state_dict( torch.load("saved_model/gin_imdb_binary/saved_model.pt", map_location=device) )
+    model.load_state_dict( torch.load(f"{savedpath}/saved_model.pt", map_location=device) )
     return model
 
 
 
 import os
-def train_and_save():
+def train_and_save(savedpath="saved_model/gin_imdb_binary/"):
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     dataset = TUDataset(path, name='IMDB-BINARY', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
     dataset = dataset.shuffle()
     train_size = int(len(dataset)*0.8)
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split( dataset, [train_size, test_size], generator=torch.Generator().manual_seed(0))
+    os.makedirs(savedpath, exist_ok=True)
+    torch.save(train_dataset, f"{savedpath}/train.pt")
+    torch.save(test_dataset, f"{savedpath}/test.pt")
     test_loader = DataLoader(test_dataset, batch_size=128)
     train_loader = DataLoader(train_dataset, batch_size=128)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = Net(dataset.num_features, 64*4*2, dataset.num_classes, num_layers=5)
-    save_model_layer_bame(model, "saved_model/gin_imdb_binary/layers.json")
+    save_model_layer_bame(model, f"{savedpath}/layers.json")
     model = model.to(device)
     model = torch.jit.script(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # initialize the early_stopping object
-    os.makedirs("saved_model/gin_imdb_binary/", exist_ok=True)
-    early_stopping = EarlyStopping(patience=30, verbose=True, path="saved_model/gin_imdb_binary/")
+    
+    early_stopping = EarlyStopping(patience=30, verbose=True, path=savedpath)
 
     def train():
         model.train()
