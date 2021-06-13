@@ -8,8 +8,7 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import GINConv, global_add_pool
 
-
-
+from pytorchtools import EarlyStopping,save_model_layer_bame
 
 class Net(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers):
@@ -44,22 +43,30 @@ class Net(torch.nn.Module):
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)
         return F.log_softmax(x, dim=-1)
+        
+    def compute(self, data):
+        return self.forward(data.x, data.edge_index, data.batch)
 
+import os
 def train_and_save():
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     dataset = TUDataset(path, name='IMDB-BINARY', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
     dataset = dataset.shuffle()
-    test_dataset = dataset[:len(dataset) // 10]
-    train_dataset = dataset[len(dataset) // 10:]
+    train_size = int(len(dataset)*0.8)
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = torch.utils.data.random_split( dataset, [train_size, test_size], generator=torch.Generator().manual_seed(0))
     test_loader = DataLoader(test_dataset, batch_size=128)
     train_loader = DataLoader(train_dataset, batch_size=128)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = Net(dataset.num_features, 64*2, dataset.num_classes, num_layers=3)
+    model = Net(dataset.num_features, 64*4*2, dataset.num_classes, num_layers=5)
+    save_model_layer_bame(model, "saved_model/gin_imdb_binary/layers.json")
     model = model.to(device)
     model = torch.jit.script(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
+    # initialize the early_stopping object
+    os.makedirs("saved_model/gin_imdb_binary/", exist_ok=True)
+    early_stopping = EarlyStopping(patience=50, verbose=True, path="saved_model/gin_imdb_binary/")
 
     def train():
         model.train()
@@ -81,20 +88,30 @@ def train_and_save():
         model.eval()
 
         total_correct = 0
+        val_loss = 0
         for data in loader:
             data = data.to(device)
             out = model(data.x, data.edge_index, data.batch)
+            loss = F.nll_loss(out, data.y)
+            val_loss += loss.item() * data.num_graphs
             pred = out.max(dim=1)[1]
             total_correct += pred.eq(data.y).sum().item()
-        return total_correct / len(loader.dataset)
+
+        return total_correct / len(loader.dataset), val_loss/len(loader.dataset)
 
 
     for epoch in range(1, 101):
         loss = train()
-        train_acc = test(train_loader)
-        test_acc = test(test_loader)
+        train_acc, train_loss = test(train_loader)
+        test_acc, test_loss = test(test_loader)
         print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, '
             f'Train: {train_acc:.4f}, Test: {test_acc:.4f}')
+        early_stopping(test_loss, model, performance={"train_acc":train_acc, "test_acc":test_acc, "train_loss":train_loss, "test_loss":test_loss})
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+    
+
 
 if __name__ == "__main__":
     train_and_save()

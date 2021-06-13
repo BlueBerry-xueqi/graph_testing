@@ -1,16 +1,52 @@
 '''
 sa.py is from Surprised Adequacy Paper open source.
 '''
+import collections
 import numpy as np
 import time
 import os
 from multiprocessing import Pool
 from tqdm import tqdm
-from keras.models import load_model, Model
+from torch.nn import Module
 from scipy.stats import gaussian_kde
+import torch
 
 def _aggr_output(x):
     return [np.mean(x[..., j]) for j in range(x.shape[-1])]
+
+class SA_Model():
+    def __init__(self) -> None:
+        self.activation = {}
+    
+    def get_activation(self, name):
+        def hook(model, input, output):
+            self.activation[name] = output.clone().detach()
+        return hook
+
+    def register_layers(self, model, layer_names):
+        for (name, module) in model.named_modules():
+            if name in layer_names:
+                module.register_forward_hook( self.get_activation(name) )
+    
+    def compute(self, model, dataset_loader, device):
+        pre = []
+        ground_truth = []
+        extracted_layers_outputs = collections.defaultdict(list)
+        for data in dataset_loader:
+            data = data.to(device)
+            outputs = model.compute(data)
+            _, prediction_label = torch.max(outputs, dim=1)
+            pre.append(prediction_label)
+            ground_truth.append(data.y)
+            for layer_name in self.activation.keys():
+                extracted_layers_outputs[layer_name].append(self.activation[layer_name])
+        
+        pre = torch.cat( pre, dim = 0)
+        ground_truth = torch.cat(ground_truth, dim = 0)
+        for k in extracted_layers_outputs:
+            extracted_layers_outputs[k] = torch.cat(extracted_layers_outputs[k] , dim = 0).detach().cpu().numpy()
+        return pre.detach().cpu().numpy(), ground_truth.detach().cpu().numpy(), extracted_layers_outputs
+        
 
 
 def _get_saved_path(base_path, dataset, dtype, layer_names):
@@ -37,7 +73,7 @@ def _get_saved_path(base_path, dataset, dtype, layer_names):
 
 def get_ats(
         model,
-        dataset,
+        dataset_loader,
         name,
         layer_names,
         save_path=None,
@@ -45,6 +81,7 @@ def get_ats(
         is_classification=True,
         num_classes=10,
         num_proc=10,
+        device="cpu"
 ):
     """Extract activation traces of dataset from model.
     Args:
@@ -62,33 +99,22 @@ def get_ats(
         pred (list): List of predicted classes.
     """
 
-    temp_model = Model(
-        inputs=model.input,
-        outputs=[model.get_layer(layer_name).output for layer_name in layer_names],
-    )
-
+    extractor = SA_Model()
+    extractor.register_layers(model, layer_names)
+    pred, ground_truth, extracted_layers_outputs = extractor.compute(model, dataset_loader, device)
+    dataset_len = len(dataset_loader.dataset)
     prefix = info("[" + name + "] ")
     if is_classification:
         p = Pool(num_proc)
         print(prefix + "Model serving")
-        pred = model.predict_classes(dataset, batch_size=batch_size, verbose=0)
-        if len(layer_names) == 1:
-            layer_outputs = [
-                temp_model.predict(dataset, batch_size=batch_size, verbose=0)
-            ]
-        else:
-            layer_outputs = temp_model.predict(
-                dataset, batch_size=batch_size, verbose=0
-            )
-
         print(prefix + "Processing ATs")
         ats = None
-        for layer_name, layer_output in zip(layer_names, layer_outputs):
+        for (layer_name, layer_output) in extracted_layers_outputs.items():
             print("Layer: " + layer_name)
             if layer_output[0].ndim == 3:
                 # For convolutional layers
                 layer_matrix = np.array(
-                    p.map(_aggr_output, [layer_output[i] for i in range(len(dataset))])
+                    p.map(_aggr_output, [layer_output[i] for i in range( dataset_len )])
                 )
             else:
                 layer_matrix = np.array(layer_output)
@@ -119,8 +145,7 @@ def find_closest_at(at, train_ats):
     dist = np.linalg.norm(at - train_ats, axis=1)
     return (min(dist), train_ats[np.argmin(dist)])
 
-
-def _get_train_target_ats(model, x_train, x_target, target_name, layer_names, **kwargs):
+def _get_train_target_ats(model, traindataset_loader, testdata_loader, target_name, layer_names, **kwargs):
     """Extract ats of train and target inputs. If there are saved files, then skip it.
     Args:
         model (keras model): Subject model.
@@ -136,48 +161,50 @@ def _get_train_target_ats(model, x_train, x_target, target_name, layer_names, **
         target_pred (list): pred of target set.
     """
 
-    #saved_train_path = _get_saved_path(args.save_path, args.d, "train", layer_names)
-    #if os.path.exists(saved_train_path[0]):
-     #   print(infog("Found saved {} ATs, skip serving".format("train")))
-        # In case train_ats is stored in a disk
-      #  train_ats = np.load(saved_train_path[0])
-       # train_pred = np.load(saved_train_path[1])
-    #else:
-    train_ats, train_pred = get_ats(
+    saved_train_path = _get_saved_path(kwargs["save_path"], kwargs["d"], "train", layer_names)
+    if os.path.exists(saved_train_path[0]):
+       print(infog("Found saved {} ATs, skip serving".format("train")))
+      #  In case train_ats is stored in a disk
+       train_ats = np.load(saved_train_path[0])
+       train_pred = np.load(saved_train_path[1])
+    else:
+        train_ats, train_pred = get_ats(
             model,
-            x_train,
+            traindataset_loader,
             "train",
             layer_names,
             num_classes=kwargs['num_classes'],
             is_classification=kwargs['is_classification'],
             save_path=None,
+            device=kwargs['device']
         )
-    #print(infog("train ATs is saved at " + saved_train_path[0]))
+        print(infog("train ATs is saved at " + saved_train_path[0]))
 
-    #saved_target_path = _get_saved_path(
-    #    args.save_path, args.d, target_name, layer_names
-    #)
-    #if os.path.exists(saved_target_path[0]):
-    #    print(infog("Found saved {} ATs, skip serving").format(target_name))
-        # In case target_ats is stored in a disk
-    #    target_ats = np.load(saved_target_path[0])
-    #    target_pred = np.load(saved_target_path[1])
-    #else:
-    target_ats, target_pred = get_ats(
+    saved_target_path = _get_saved_path(
+       kwargs["save_path"], kwargs["d"], target_name, layer_names
+    )
+    if os.path.exists(saved_target_path[0]):
+       print(infog("Found saved {} ATs, skip serving").format(target_name))
+       # In case target_ats is stored in a disk
+       target_ats = np.load(saved_target_path[0])
+       target_pred = np.load(saved_target_path[1])
+    else:
+        target_ats, target_pred = get_ats(
             model,
-            x_target,
+            testdata_loader,
             target_name,
             layer_names,
             num_classes=kwargs['num_classes'],
             is_classification=kwargs['is_classification'],
             save_path=None,
+            device=kwargs['device']
         )
-        #print(infog(target_name + " ATs is saved at " + saved_target_path[0]))
+        print(infog(target_name + " ATs is saved at " + saved_target_path[0]))
 
     return train_ats, train_pred, target_ats, target_pred
 
 
-def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
+def fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs):
     """Distance-based SA
     Args:
         model (keras model): Subject model.
@@ -194,7 +221,7 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
 
     prefix = info("[" + target_name + "] ")
     train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
-        model, x_train, x_target, target_name, layer_names, **kwargs
+        model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs
     )
 
     class_matrix = {}
@@ -219,7 +246,7 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
     return dsa
 
 
-def fetch_sihoutete(model, x_train, x_target, target_name, layer_names, **kwargs):
+def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs):
     """Distance-based SA
     Args:
         model (keras model): Subject model.
@@ -236,7 +263,7 @@ def fetch_sihoutete(model, x_train, x_target, target_name, layer_names, **kwargs
 
     prefix = info("[" + target_name + "] ")
     train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
-        model, x_train, x_target, target_name, layer_names, **kwargs
+        model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs
     )
 
     class_matrix = {}
@@ -380,10 +407,10 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
             label = target_pred[i]
             kde = kdes[label]
             lsa.append(_get_lsa(kde, at, removed_cols, **kwargs))
-    #else:
-    #    kde = kdes[0]
-    #    for at in tqdm(target_ats):
-    #        lsa.append(_get_lsa(kde, at, removed_cols))
+    else:
+       kde = kdes[0]
+       for at in tqdm(target_ats):
+           lsa.append(_get_lsa(kde, at, removed_cols))
     del target_ats, train_ats,train_pred, target_pred, kdes
     return lsa
 
@@ -431,43 +458,3 @@ def warn(msg):
 def fail(msg):
     return Colors.FAIL + msg + Colors.ENDC
 
-
-def compute_roc(probs_neg, probs_pos):
-    probs = np.concatenate((probs_neg, probs_pos))
-    labels = np.concatenate((np.zeros_like(probs_neg), np.ones_like(probs_pos)))
-    fpr, tpr, _ = roc_curve(labels, probs)
-    auc_score = auc(fpr, tpr)
-
-    return fpr, tpr, auc_score
-
-
-def compute_roc_auc(test_sa, adv_sa, split=1000):
-    tr_test_sa = np.array(test_sa[:split])
-    tr_adv_sa = np.array(adv_sa[:split])
-
-    tr_values = np.concatenate(
-        (tr_test_sa.reshape(-1, 1), tr_adv_sa.reshape(-1, 1)), axis=0
-    )
-    tr_labels = np.concatenate(
-        (np.zeros_like(tr_test_sa), np.ones_like(tr_adv_sa)), axis=0
-    )
-
-    lr = LogisticRegressionCV(cv=5, n_jobs=-1).fit(tr_values, tr_labels)
-
-    ts_test_sa = np.array(test_sa[split:])
-    ts_adv_sa = np.array(adv_sa[split:])
-    values = np.concatenate(
-        (ts_test_sa.reshape(-1, 1), ts_adv_sa.reshape(-1, 1)), axis=0
-    )
-    labels = np.concatenate(
-        (np.zeros_like(ts_test_sa), np.ones_like(ts_adv_sa)), axis=0
-    )
-
-    probs = lr.predict_proba(values)[:, 1]
-
-    _, _, auc_score = compute_roc(
-        probs_neg=probs[: (len(test_sa) - split)],
-        probs_pos=probs[(len(test_sa) - split) :],
-    )
-
-    return auc_score
