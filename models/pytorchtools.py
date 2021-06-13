@@ -60,4 +60,8 @@ def save_model_layer_bame(model, saved_path):
         for (name, _) in model.named_modules():
             layers.append(name)
             f.write(name+"\n")
+        
+    json.dump( layers, open(saved_path+".json", "w") )
+
+
     

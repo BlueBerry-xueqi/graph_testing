@@ -8,7 +8,7 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import GINConv, global_add_pool
 
-from pytorchtools import EarlyStopping,save_model_layer_bame
+from .pytorchtools import EarlyStopping,save_model_layer_bame
 
 class Net(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers):
@@ -47,6 +47,16 @@ class Net(torch.nn.Module):
     def compute(self, data):
         return self.forward(data.x, data.edge_index, data.batch)
 
+def construct_model(device):
+    path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
+    dataset = TUDataset(path, name='IMDB-BINARY', transform=OneHotDegree(135))
+    model = Net(dataset.num_features, 64*4*2, dataset.num_classes, num_layers=5)
+    print("Load Model Weights")
+    model.load_state_dict( torch.load("saved_model/gin_imdb_binary/saved_model.pt", map_location=device) )
+    return model
+
+
+
 import os
 def train_and_save():
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
@@ -66,7 +76,7 @@ def train_and_save():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # initialize the early_stopping object
     os.makedirs("saved_model/gin_imdb_binary/", exist_ok=True)
-    early_stopping = EarlyStopping(patience=50, verbose=True, path="saved_model/gin_imdb_binary/")
+    early_stopping = EarlyStopping(patience=30, verbose=True, path="saved_model/gin_imdb_binary/")
 
     def train():
         model.train()

@@ -10,13 +10,49 @@ from tqdm import tqdm
 from torch.nn import Module
 from scipy.stats import gaussian_kde
 import torch
+from torch_geometric.nn import global_add_pool
+# Standard library imports.
+import warnings
 
+# SciPy imports.
+from scipy import linalg
+from numpy import  (atleast_2d, pi,cov)
+import numpy as np
 def _aggr_output(x):
     return [np.mean(x[..., j]) for j in range(x.shape[-1])]
+
+class refied_gaussian_kde(gaussian_kde):
+      # https://github.com/mdhaber/scipy/blob/61d3223e61722018f007b9cbfc3241e0fb85ce61/scipy/stats/kde.py
+      def _compute_covariance(self):
+        """Computes the covariance matrix for each Gaussian kernel using
+        covariance_factor().
+        """
+
+        self.factor = self.covariance_factor()
+        # Cache covariance and inverse covariance of the data
+        if not hasattr(self, '_data_inv_cov'):
+            self._data_covariance = atleast_2d(cov(self.dataset, rowvar=1,
+                                               bias=False,
+                                               aweights=self.weights))
+            # Small multiple of identity added to covariance matrix for
+            # numerical stability. Fixes gh-10205. For justification, see
+            # https://juanitorduz.github.io/multivariate_normal/ and primary
+            # source http://www.gaussianprocess.org/gpml/chapters/RWA.pdf
+            eps_I = 1e-8*np.eye(self.d)
+            self._data_covariance += eps_I
+            self._data_inv_cov = linalg.inv(self._data_covariance)
+
+        self.covariance = self._data_covariance * self.factor**2
+        self.inv_cov = self._data_inv_cov / self.factor**2
+        #e=np.linalg.eigvalsh(self.covariance*2*pi)
+        #print(min(e))
+        L = linalg.cholesky(self.covariance*2*pi)
+        self.log_det = 2*np.log(np.diag(L)).sum()
 
 class SA_Model():
     def __init__(self) -> None:
         self.activation = {}
+        self.pool = global_add_pool
     
     def get_activation(self, name):
         def hook(model, input, output):
@@ -39,7 +75,10 @@ class SA_Model():
             pre.append(prediction_label)
             ground_truth.append(data.y)
             for layer_name in self.activation.keys():
-                extracted_layers_outputs[layer_name].append(self.activation[layer_name])
+                #print(self.activation[layer_name].shape)
+                imout = self.pool(self.activation[layer_name], data.batch)
+                print(imout.shape)
+                extracted_layers_outputs[layer_name].append(imout)
         
         pre = torch.cat( pre, dim = 0)
         ground_truth = torch.cat(ground_truth, dim = 0)
@@ -340,6 +379,7 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
         kdes = {}
         for label in tqdm(range(kwargs['num_classes']), desc="kde"):
                 refined_ats = np.transpose(train_ats[class_matrix[label]])
+                print(refined_ats.shape)
                 #s = refined_ats.shape
                 refined_ats = np.delete(refined_ats, removed_cols, axis=0)
                 #print("Org Shape {}, delete {}".format(s, refined_ats.shape))
@@ -348,7 +388,8 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
                         warn("ats were removed by threshold {}".format(kwargs['var_threshold']))
                     )
                     break
-                kdes[label] = gaussian_kde(refined_ats)
+                #print(refined_ats.shape)
+                kdes[label] = refied_gaussian_kde(refined_ats)
 
     else:
          col_vectors = np.transpose(train_ats)
@@ -360,7 +401,7 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
          refined_ats = np.delete(refined_ats, removed_cols, axis=0)
          if refined_ats.shape[0] == 0:
              print(warn("ats were removed by threshold {}".format(kwargs['var_threshold'])))
-         kdes = [gaussian_kde(refined_ats)]
+         kdes = [refied_gaussian_kde(refined_ats)]
 
     print(infog("The number of removed columns: {}".format(len(removed_cols))))
 
