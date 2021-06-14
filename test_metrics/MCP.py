@@ -10,116 +10,14 @@ import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-import keras
-from keras.datasets import mnist
-from keras.datasets import cifar10
-from keras import optimizers
-import random
-from keras.utils import to_categorical
-import numpy as np
-from keras.models import load_model
-from matplotlib import pyplot as plt
-import csv
-from keras.utils import np_utils
-from keras.models import Model, Input, load_model
 import pandas as pd
 import argparse
 # import condition
-
+import numpy as np
 CLIP_MAX = 0.5
 
 
-# 输入：待测模型、排序度量lsa还是dsa,待测试的集合，选择的size
-# 输出：准确率，在待测试的集合上
-# 把预测的标签作为伪标签
-def retrain(model, args, layer_names, selectsize=100, attack='fgsm', measure='lsa', datatype='mnist'):
-    (x_train, __), (__, __) = mnist.load_data()
-    # npzfile=np.load('mnist.npz')
-    # y_train= npzfile['y_train']
-    # x_train= npzfile['x_train']
-    x_train = x_train.astype("float32").reshape(-1, 28, 28, 1)
-    x_train = (x_train / 255.0) - (1.0 - CLIP_MAX)
-    npzfile = np.load('./adv/data/mnist/mnist_' + attack + '_compound8.npz')
-    y_test = npzfile['y_test']
-    x_test = npzfile['x_test']
 
-    x_target = x_test
-
-    target_lst = []
-
-    # baselines =['LSA','DSA','CES','MCP','SRS','AAL']
-
-    if measure == 'SRS':
-        x_select, y_select = select_rondom(selectsize, x_target, x_target, y_test)
-    if measure == 'MCP':
-        x_select, y_select = select_my_optimize(model, selectsize, x_target, y_test)
-
-    if measure == 'AAL':
-        path = "./mnist_finalResults/mnist_" + attack + "_compound8_result.csv"
-        csv_data = pd.read_csv(path, header=None)
-        target_lst = []
-        for i in range(len(csv_data.values.T)):
-            target_lst.append(csv_data.values.T[i])
-    # if measure == 'CES':
-    #     indexlst = condition.conditional_sample(model, x_target, selectsize)
-    #     x_select, y_select = select_from_index(selectsize, x_target, indexlst, y_test)
-    elif measure not in ['SRS', 'MCP']:
-        x_select, y_select = select_from_large(selectsize, x_target, target_lst, y_test)
-    y_select = np_utils.to_categorical(y_select, 10)
-    y_test = np_utils.to_categorical(y_test, 10)
-
-    score = model.evaluate(x_target, y_test, verbose=0)
-    # print('Test Loss: %.4f' % score[0])
-    print('Before retrain, Test accuracy: %.4f' % score[1])
-    origin_acc = score[1]
-
-    # sgd = optimizers.SGD(lr=0.01)
-    # loss="categorical_crossentropy", optimizer="adadelta", metrics=["accuracy"]
-    model.compile(loss='categorical_crossentropy', optimizer="adadelta", metrics=['accuracy'])
-
-    retrain_acc = 0
-
-    model.fit(x_select, y_select, batch_size=100, epochs=5, shuffle=True, verbose=1, validation_data=(x_target, y_test))
-    score = model.evaluate(x_target, y_test, verbose=0)
-    retrain_acc = score[1]
-
-    return retrain_acc, origin_acc
-
-
-def retrain_2(model, data_path, selectsize=100):
-    (_, _), (_, y_test) = mnist.load_data()
-    x_test = np.load(data_path)
-    x_select, y_select = select_my_optimize(model, selectsize, x_test, y_test)
-    y_test = to_categorical(y_test, 10)
-    y_select = to_categorical(y_select, 10)
-    ori_score = model.evaluate(x_test, y_test, verbose=0)
-    print("ori acc:{}".format(ori_score[1]))
-    model.compile(loss='categorical_crossentropy', optimizer="adam", metrics=['accuracy'])
-    model.fit(x_select, y_select, batch_size=100, epochs=5, shuffle=True, verbose=1, validation_data=(x_test, y_test))
-    score = model.evaluate(x_test, y_test, verbose=0)
-    print("MPC acc:{}".format(score[1]))
-    return score[1]
-
-
-def retrain_3(model, data_path, selectsize=100):
-    (_, y_train), (_, _) = mnist.load_data()
-    x_train = np.load(data_path)
-    x_train = x_train.astype("float32") / 255
-    x_train = x_train.reshape(-1, 28, 28, 1)
-    x_select, y_select, selected_idx = select_my_optimize(model, selectsize, x_train, y_train)
-    selected_idx = np.asarray(selected_idx)
-    x_select = x_train[selected_idx]
-    y_select = y_train[selected_idx]
-    y_train = to_categorical(y_train, 10)
-    y_select = to_categorical(y_select, 10)
-
-    ori_score = model.evaluate(x_train, y_train, verbose=0)
-    print("ori acc:{}".format(ori_score[1]))
-    model.compile(loss='categorical_crossentropy', optimizer="adam", metrics=['accuracy'])
-    model.fit(x_select, y_select, batch_size=256, epochs=10, shuffle=True, verbose=1)
-    score = model.evaluate(x_train, y_train, verbose=0)
-    print("MPC acc:{}".format(score[1]))
-    return score[1]
 
 def find_second(act, ncl=10):
     max_ = 0
@@ -141,25 +39,6 @@ def find_second(act, ncl=10):
     # print 'max:',max_index
     return max_index, sec_index, ratio  # ratio是第二大输出达到最大输出的百分比
 
-# for selection only
-def select_only(model, selectsize, x_target):
-    act_layers = model.predict(x_target)
-    dicratio = [[] for i in range(100)]  # 只用90，闲置10个
-    dicindex = [[] for i in range(100)]
-    for i in range(len(act_layers)):
-        act = act_layers[i]
-        max_index, sec_index, ratio = find_second(act)  # max_index
-        # 安装第一和第二大的标签来存储，比如第一是8，第二是4，那么就存在84里，比例和测试用例的序号
-        dicratio[max_index * 10 + sec_index].append(ratio)
-        dicindex[max_index * 10 + sec_index].append(i)
-
-    selected_lst = select_from_firstsec_dic(selectsize, dicratio, dicindex)
-    # selected_lst,lsa_lst = order_output(target_lsa,select_amount)
-    selected_idx = []
-    for i in range(selectsize):
-        selected_idx.append(selected_lst[i])
-
-    return selected_idx
 
 # for wilds datasets
 def select_wilds_only(model, selectsize, x_target, ncl):
@@ -182,32 +61,6 @@ def select_wilds_only(model, selectsize, x_target, ncl):
 
     return selected_idx
 
-
-
-# 返回的是我们的方法优化版的采样用例
-def select_my_optimize(model, selectsize, x_target, y_test):
-    x = np.zeros((selectsize, 28, 28, 1))
-    y = np.zeros((selectsize,))
-
-    act_layers = model.predict(x_target)
-    dicratio = [[] for i in range(100)]  # 只用90，闲置10个
-    dicindex = [[] for i in range(100)]
-    for i in range(len(act_layers)):
-        act = act_layers[i]
-        max_index, sec_index, ratio = find_second(act)  # max_index
-        # 安装第一和第二大的标签来存储，比如第一是8，第二是4，那么就存在84里，比例和测试用例的序号
-        dicratio[max_index * 10 + sec_index].append(ratio)
-        dicindex[max_index * 10 + sec_index].append(i)
-
-    selected_lst = select_from_firstsec_dic(selectsize, dicratio, dicindex)
-    # selected_lst,lsa_lst = order_output(target_lsa,select_amount)
-    selected_idx = []
-    for i in range(selectsize):
-        x[i] = x_target[selected_lst[i]]
-        y[i] = y_test[selected_lst[i]]
-        selected_idx.append(selected_lst[i])
-
-    return x, y, selected_idx
 
 
 # 输入第一第二大的字典，输出selected_lst。用例的index
@@ -269,42 +122,6 @@ def no_empty_number(dicratio):
     return no_empty
 
 
-def select_from_large(select_amount, x_target, target_lsa, y_test):
-    x = np.zeros((select_amount, 28, 28, 1))
-    y = np.zeros((select_amount,))
-
-    selected_lst, lsa_lst = order_output(target_lsa, select_amount)
-    # print(lsa_lst)
-    # print(selected_lst)
-    for i in range(select_amount):
-        x[i] = x_target[selected_lst[i]]
-        y[i] = y_test[selected_lst[i]]
-    return x, y
-
-
-def select_rondom(select_amount, x_target, target_lsa, y_test):
-    x = np.zeros((select_amount, 28, 28, 1))
-    y = np.zeros((select_amount,))
-
-    selected_lst = np.random.choice(range(len(target_lsa)), replace=False, size=select_amount)
-    # selected_lst,lsa_lst = order_output(target_lsa,select_amount)
-    for i in range(select_amount):
-        x[i] = x_target[selected_lst[i]]
-        y[i] = y_test[selected_lst[i]]
-    return x, y
-
-
-# 根据indexlist来选择用例
-def select_from_index(select_amount, x_target, indexlst, y_test):
-    x = np.zeros((select_amount, 28, 28, 1))
-    y = np.zeros((select_amount,))
-    # print(indexlst)
-    for i in range(select_amount):
-        x[i] = x_target[indexlst[i]]
-        y[i] = y_test[indexlst[i]]
-    return x, y
-
-
 # 找到前select_amount大的值的index输出
 # 这个函数得修改一下
 
@@ -345,34 +162,6 @@ def fetch_our_measure(model, x_target):
     return ratio_lst
 
 
-def createdataset(attack, ratio=8):
-    if attack in ['rotation', 'translation', 'shear', 'brightness', 'contrast', 'scale']:
-        x_target = np.load('./imagetrans/mnist_' + attack + '.npy')
-    else:
-        x_target = np.load('./adv/data/mnist/Adv_mnist_' + attack + '.npy')
-    if attack in ['rotation', 'translation', 'shear', 'brightness', 'contrast', 'scale']:
-        x_target = x_target.astype("float32").reshape(-1, 28, 28, 1)
-        x_target = (x_target / 255.0) - (1.0 - CLIP_MAX)
-
-    npzfile = np.load('./mnist.npz')
-    y_test = npzfile['y_test']
-    x_test = npzfile['x_test']
-
-    x_test = x_test.astype("float32").reshape(-1, 28, 28, 1)
-    x_test = (x_test / 255.0) - (1.0 - CLIP_MAX)
-
-    origin_lst = np.random.choice(range(10000), replace=False, size=ratio * 1000)
-    mutated_lst = np.random.choice(range(10000), replace=False, size=10000 - ratio * 1000)
-
-    x_dest = np.append(x_test[origin_lst], x_target[mutated_lst], axis=0)
-    y_dest = np.append(y_test[origin_lst], y_test[mutated_lst])
-    np.savez('./adv/data/mnist/mnist_' + attack + '_compound8.npz', x_test=x_dest, y_test=y_dest)
-
-    y_dest = np_utils.to_categorical(y_dest, 10)
-    # score = model.evaluate(x_dest, y_dest,verbose=0)
-    # print('Test Loss: %.4f' % score[0])
-    # print('Before retrain, Test accuracy: %.4f'% score[1])
-    return
 
 
 def MCP_selection_wilds(model, target_data, select_size, ncl):
@@ -395,14 +184,14 @@ def MCP_score(model, target_data, ncl):
     """
     select_size = len(target_data)
     select_index = MCP_selection_wilds(model, target_data, select_size, ncl)
-    total_score = margin_score(model, target_data)
+    total_score, _, _ = margin_score(model, target_data)
     ranked_score = total_score[select_index]
     return ranked_score
 
 
 def margin_score(model, target_data):
-    prediction = model.predict(target_data)
+    prediction,  pre_labels, ground_truth = model.predict(target_data)
     prediction_sorted = np.sort(prediction)
     margin_list = prediction_sorted[:, -1] / prediction_sorted[:, -2]
-    return margin_list
+    return margin_list,   pre_labels, ground_truth
 

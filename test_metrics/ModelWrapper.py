@@ -50,7 +50,10 @@ class SA_Model():
             ground_truth.append(data.y)
             for layer_name in self.activation.keys():
                 #print(self.activation[layer_name].shape)
-                imout = self.pool(self.activation[layer_name], data.batch)
+                try:
+                    imout = self.pool(self.activation[layer_name], data.batch)
+                except:
+                    imout = self.activation[layer_name]
                 #print(imout.shape)
                 extracted_layers_outputs[layer_name].append(imout)
         
