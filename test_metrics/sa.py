@@ -1,16 +1,16 @@
 '''
 sa.py is from Surprised Adequacy Paper open source.
 '''
-import collections
+
 import numpy as np
 import time
 import os
 from multiprocessing import Pool
 from tqdm import tqdm
-from torch.nn import Module
+from test_metrics.ModelWrapper import SA_Model
+
 from scipy.stats import gaussian_kde
-import torch
-from torch_geometric.nn import global_add_pool
+
 # Standard library imports.
 import warnings
 
@@ -49,42 +49,7 @@ class refied_gaussian_kde(gaussian_kde):
         L = linalg.cholesky(self.covariance*2*pi)
         self.log_det = 2*np.log(np.diag(L)).sum()
 
-class SA_Model():
-    def __init__(self) -> None:
-        self.activation = {}
-        self.pool = global_add_pool
-    
-    def get_activation(self, name):
-        def hook(model, input, output):
-            self.activation[name] = output.clone().detach()
-        return hook
 
-    def register_layers(self, model, layer_names):
-        for (name, module) in model.named_modules():
-            if name in layer_names:
-                module.register_forward_hook( self.get_activation(name) )
-    
-    def compute(self, model, dataset_loader, device):
-        pre = []
-        ground_truth = []
-        extracted_layers_outputs = collections.defaultdict(list)
-        for data in dataset_loader:
-            data = data.to(device)
-            outputs = model.compute(data)
-            _, prediction_label = torch.max(outputs, dim=1)
-            pre.append(prediction_label)
-            ground_truth.append(data.y)
-            for layer_name in self.activation.keys():
-                #print(self.activation[layer_name].shape)
-                imout = self.pool(self.activation[layer_name], data.batch)
-                #print(imout.shape)
-                extracted_layers_outputs[layer_name].append(imout)
-        
-        pre = torch.cat( pre, dim = 0)
-        ground_truth = torch.cat(ground_truth, dim = 0)
-        for k in extracted_layers_outputs:
-            extracted_layers_outputs[k] = torch.cat(extracted_layers_outputs[k] , dim = 0).detach().cpu().numpy()
-        return pre.detach().cpu().numpy(), ground_truth.detach().cpu().numpy(), extracted_layers_outputs
         
 
 
@@ -139,9 +104,9 @@ def get_ats(
         ground_truth (list)
     """
 
-    extractor = SA_Model()
-    extractor.register_layers(model, layer_names)
-    pred, ground_truth, extracted_layers_outputs = extractor.compute(model, dataset_loader, device)
+    extractor = SA_Model(model, device)
+    extractor.register_layers(layer_names)
+    pred, ground_truth, extracted_layers_outputs = extractor.extract_intermediate_outputs(dataset_loader)
     dataset_len = len(dataset_loader.dataset)
     prefix = info("[" + name + "] ")
     if is_classification:

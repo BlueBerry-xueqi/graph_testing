@@ -1,3 +1,4 @@
+from test_metrics.ModelWrapper import SA_Model
 from numpy import mod
 from models.gin import train_and_save, construct_model
 import torch
@@ -6,7 +7,7 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.data import DataLoader
 import os.path as osp
 from test_metrics import sa
-
+from test_metrics import DeepGini 
 model_data_path="saved_model/gin_imdb_binary/"
 #train_and_save(savedpath=model_data_path)
 
@@ -38,3 +39,10 @@ si, target_pred,ground_truth_tagrget = sa.fetch_sihoutete(model, train_loader, t
         save_path="saved_model/gin_imdb_binary", d="IMDB", var_threshold=1e-5)
 tau, p_value = stats.kendalltau(si, ground_truth_tagrget!=target_pred)
 print(f"Si Kendall Tau {tau}, Pvalue {p_value}")
+
+deepModel = SA_Model(model, device)
+gigniscore, pre_labels, ground_truth  = DeepGini.deepgini_score(deepModel, test_loader)
+tau, p_value = stats.kendalltau(gigniscore, ground_truth!=pre_labels)
+print(f"DeepGiNi Kendall Tau {tau}, Pvalue {p_value}")
+
+
