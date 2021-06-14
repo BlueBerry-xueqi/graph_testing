@@ -381,3 +381,28 @@ def MCP_selection_wilds(model, target_data, select_size, ncl):
     print("Over...")
     return select_index
 
+
+def MCP_score(model, target_data, ncl):
+    """
+
+    Args:
+        model:
+        target_data:
+        ncl: number of class
+
+    Returns:
+
+    """
+    select_size = len(target_data)
+    select_index = MCP_selection_wilds(model, target_data, select_size, ncl)
+    total_score = margin_score(model, target_data)
+    ranked_score = total_score[select_index]
+    return ranked_score
+
+
+def margin_score(model, target_data):
+    prediction = model.predict(target_data)
+    prediction_sorted = np.sort(prediction)
+    margin_list = prediction_sorted[:, -1] / prediction_sorted[:, -2]
+    return margin_list
+
