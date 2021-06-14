@@ -20,14 +20,21 @@ train_loader = DataLoader(train_dataset, batch_size=128)
 
 model.to(device)
 
+import scipy.stats as stats
 #fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs)
-sa.fetch_dsa( model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.3.nn.3"], num_classes=2, is_classification=True,device=device,
+dsa, target_pred_dsa, ground_truth_tagrget = sa.fetch_dsa( model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.4.nn.3", ], num_classes=2, is_classification=True,device=device,
+        save_path="saved_model/gin_imdb_binary", d="IMDB", var_threshold=1e-5)
+tau, p_value = stats.kendalltau(dsa, ground_truth_tagrget != target_pred_dsa)
+
+print(f"DSA Kendall Tau {tau}, Pvalue {p_value}")
+
+lsa, target_pred_lsa, ground_truth_tagrget = sa.fetch_lsa( model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.4.nn.3", ], num_classes=2, is_classification=True,device=device,
         save_path="saved_model/gin_imdb_binary", d="IMDB", var_threshold=1e-5)
 
+tau, p_value = stats.kendalltau(lsa, ground_truth_tagrget!= target_pred_lsa)
+print(f"LSA Kendall Tau {tau}, Pvalue {p_value}")
 
-sa.fetch_lsa( model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.3.nn.3"], num_classes=2, is_classification=True,device=device,
+si, target_pred,ground_truth_tagrget = sa.fetch_sihoutete(model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.4.nn.3", ], num_classes=2, is_classification=True,device=device,
         save_path="saved_model/gin_imdb_binary", d="IMDB", var_threshold=1e-5)
-
-sa.fetch_sihoutete(model, train_loader, test_loader, "test", ["convs.3.nn.2", "convs.3.nn.3"], num_classes=2, is_classification=True,device=device,
-        save_path="saved_model/gin_imdb_binary", d="IMDB", var_threshold=1e-5)
-
+tau, p_value = stats.kendalltau(si, ground_truth_tagrget!=target_pred)
+print(f"Si Kendall Tau {tau}, Pvalue {p_value}")

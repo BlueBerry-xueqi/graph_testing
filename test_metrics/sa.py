@@ -136,6 +136,7 @@ def get_ats(
     Returns:
         ats (list): List of (layers, inputs, neuron outputs).
         pred (list): List of predicted classes.
+        ground_truth (list)
     """
 
     extractor = SA_Model()
@@ -168,7 +169,7 @@ def get_ats(
         np.save(save_path[0], ats)
         np.save(save_path[1], pred)
 
-    return ats, pred
+    return ats, pred, ground_truth
 
 
 def find_closest_at(at, train_ats):
@@ -198,16 +199,17 @@ def _get_train_target_ats(model, traindataset_loader, testdata_loader, target_na
         train_pred (list): pred of train set.
         target_ats (list): ats of target set.
         target_pred (list): pred of target set.
+        ground_truth_tagrget (list): ground truth
     """
 
     saved_train_path = _get_saved_path(kwargs["save_path"], kwargs["d"], "train", layer_names)
     if os.path.exists(saved_train_path[0]):
        print(infog("Found saved {} ATs, skip serving".format("train")))
       #  In case train_ats is stored in a disk
-       train_ats = np.load(saved_train_path[0])
-       train_pred = np.load(saved_train_path[1])
+    #    train_ats = np.load(saved_train_path[0])
+    #    train_pred = np.load(saved_train_path[1])
     else:
-        train_ats, train_pred = get_ats(
+        train_ats, train_pred, _  = get_ats(
             model,
             traindataset_loader,
             "train",
@@ -228,7 +230,7 @@ def _get_train_target_ats(model, traindataset_loader, testdata_loader, target_na
        target_ats = np.load(saved_target_path[0])
        target_pred = np.load(saved_target_path[1])
     else:
-        target_ats, target_pred = get_ats(
+        target_ats,target_pred, ground_truth_tagrget = get_ats(
             model,
             testdata_loader,
             target_name,
@@ -240,7 +242,7 @@ def _get_train_target_ats(model, traindataset_loader, testdata_loader, target_na
         )
         print(infog(target_name + " ATs is saved at " + saved_target_path[0]))
 
-    return train_ats, train_pred, target_ats, target_pred
+    return train_ats, train_pred, target_ats, target_pred, ground_truth_tagrget
 
 
 def fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs):
@@ -259,7 +261,7 @@ def fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, 
     #assert args.is_classification == True
 
     prefix = info("[" + target_name + "] ")
-    train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
+    train_ats, train_pred, target_ats, target_pred, ground_truth_tagrget = _get_train_target_ats(
         model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs
     )
 
@@ -282,7 +284,7 @@ def fetch_dsa(model, x_train_loader, x_target_loader, target_name, layer_names, 
         )
         dsa.append(a_dist / b_dist)
     del target_ats, train_ats, train_pred
-    return dsa, target_pred
+    return dsa, target_pred, ground_truth_tagrget
 
 
 def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs):
@@ -301,7 +303,7 @@ def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_n
     #assert args.is_classification == True
 
     prefix = info("[" + target_name + "] ")
-    train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
+    train_ats, train_pred, target_ats, target_pred, ground_truth_tagrget = _get_train_target_ats(
         model, x_train_loader, x_target_loader, target_name, layer_names, **kwargs
     )
 
@@ -313,7 +315,7 @@ def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_n
         class_matrix[label].append(i)
         all_idx.append(i)
 
-    dsa = []
+    si = []
 
     print(prefix + "Fetching sihoutete")
     for i, at in enumerate(tqdm(target_ats)):
@@ -322,9 +324,9 @@ def fetch_sihoutete(model, x_train_loader, x_target_loader, target_name, layer_n
         b_dist = find_min_at(
             at, train_ats, class_matrix,label
         )
-        dsa.append((b_dist-a_dist) /np.max([a_dist, b_dist]) )
+        si.append((b_dist-a_dist) /np.max([a_dist, b_dist]) )
     del target_ats, train_ats, train_pred
-    return dsa, target_pred
+    return si, target_pred,ground_truth_tagrget
 
 def find_min_at(at, train_ats, class_matrix,label):
     vmin = None
@@ -428,7 +430,7 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
     """
 
     prefix = info("[" + target_name + "] ")
-    train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
+    train_ats, train_pred, target_ats, target_pred, ground_truth_tagrget = _get_train_target_ats(
         model, x_train, x_target, target_name, layer_names, **kwargs
     )
 
@@ -448,12 +450,12 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
             label = target_pred[i]
             kde = kdes[label]
             lsa.append(_get_lsa(kde, at, removed_cols, **kwargs))
-    else:
-       kde = kdes[0]
-       for at in tqdm(target_ats):
-           lsa.append(_get_lsa(kde, at, removed_cols))
+    # else:
+    #    kde = kdes[0]
+    #    for at in tqdm(target_ats):
+    #        lsa.append(_get_lsa(kde, at, removed_cols))
     del target_ats, train_ats,train_pred,  kdes
-    return lsa,target_pred
+    return lsa,target_pred, ground_truth_tagrget
 
 
 def get_sc(lower, upper, k, sa):
