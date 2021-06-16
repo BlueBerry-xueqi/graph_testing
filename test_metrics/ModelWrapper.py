@@ -1,10 +1,11 @@
+from typing import Tuple
 from scipy.stats.stats import mode
 import torch
 from torch_geometric.nn import global_add_pool
 from torch.nn import Module
 import collections
 
-class SA_Model():
+class ModelWrapper():
     def __init__(self, model, device) -> None:
         self.model = model
         self.activation = {}
@@ -62,3 +63,44 @@ class SA_Model():
         for k in extracted_layers_outputs:
             extracted_layers_outputs[k] = torch.cat(extracted_layers_outputs[k] , dim = 0).detach().cpu().numpy()
         return pre.detach().cpu().numpy(), ground_truth.detach().cpu().numpy(), extracted_layers_outputs
+
+import numpy as np
+class NCModelWrapper(ModelWrapper):
+    def __init__(self, model, device) -> None:
+        super(NCModelWrapper, self).__init__( model, device)
+        self.model = model
+        self.activation = {}
+        self.pool = global_add_pool
+        self.device = device
+    
+    def extract_intermediate_outputs(self, dataset_loader):
+        pre = []
+        ground_truth = []
+        extracted_layers_outputs = collections.defaultdict(list)
+        batch = []
+        for data in dataset_loader:
+            data = data.to(self.device)
+            outputs = self.model.compute(data)
+            _, prediction_label = torch.max(outputs, dim=1)
+            pre.append(prediction_label)
+            ground_truth.append(data.y)
+            for layer_name in self.activation.keys():
+                #print(self.activation[layer_name].shape)
+                if len(self.activation[layer_name]) != len(data.batch):
+                    imout = self.activation[layer_name]
+                    if len(batch) != 0:
+                        batch.extend(data.batch.cpu().numpy() +  np.max(batch) + 1 )
+                    else: 
+                        batch.extend(data.batch.cpu().numpy())
+                else:
+                    imout =  self.activation[layer_name]
+                #print(imout.shape)
+                extracted_layers_outputs[layer_name].append(imout)
+        
+        pre = torch.cat( pre, dim = 0)
+        ground_truth = torch.cat(ground_truth, dim = 0)
+        for k in extracted_layers_outputs:   
+            extracted_layers_outputs[k] = torch.cat(extracted_layers_outputs[k] , dim = 0).detach().cpu().numpy()
+
+
+        return pre.detach().cpu().numpy(), ground_truth.detach().cpu().numpy(), extracted_layers_outputs, np.asarray(batch)
