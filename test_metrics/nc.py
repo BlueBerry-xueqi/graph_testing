@@ -80,7 +80,7 @@ class kmnc(object):
         '''
         self.neuron_activate_dense =[]
         self.neuron_activate_gl =[]
-        _, _, outputs, batch  = self.model.extract_intermediate_outputs(test)
+        pre, ground, outputs, batch  = self.model.extract_intermediate_outputs(test)
         datalength = len(test.dataset)
         for l in self.layers:
             if len(outputs[l]) != datalength:
@@ -120,23 +120,23 @@ class kmnc(object):
         subset.append(initial)
         max_cover_num=(big_bins[initial]>0).sum()
         cover_last=big_bins[initial]
-        while True:
-            flag=False
-            for index in tqdm(lst):
-                temp1=np.bitwise_or(cover_last,big_bins[index])
-                now_cover_num=(temp1>0).sum()
-                if now_cover_num>max_cover_num:
-                    max_cover_num=now_cover_num
-                    max_index=index
-                    max_cover=temp1
-                    flag=True
-            cover_last=max_cover
-            if not flag or len(lst)==1:
-                break
-            lst.remove(max_index)
-            subset.append(max_index)
-            print(max_cover_num)
-        return subset, score_each
+        # while True:
+        #     flag=False
+        #     for index in tqdm(lst):
+        #         temp1=np.bitwise_or(cover_last,big_bins[index])
+        #         now_cover_num=(temp1>0).sum()
+        #         if now_cover_num>max_cover_num:
+        #             max_cover_num=now_cover_num
+        #             max_index=index
+        #             max_cover=temp1
+        #             flag=True
+        #     cover_last=max_cover
+        #     if not flag or len(lst)==1:
+        #         break
+        #     lst.remove(max_index)
+        #     subset.append(max_index)
+        #     print(max_cover_num)
+        return subset, score_each,pre, ground
 
 
 
@@ -206,7 +206,7 @@ class nbc(object):
     def rank_fast(self,test,use_lower=False):
         self.neuron_activate_dense =[]
         self.neuron_activate_gl =[]
-        _, _, outputs, batch  = self.model.extract_intermediate_outputs(test)
+        pre, ground, outputs, batch  = self.model.extract_intermediate_outputs(test)
         datalength = len(test.dataset)
         for l in self.layers:
             if len(outputs[l]) != datalength:
@@ -270,7 +270,7 @@ class nbc(object):
             if use_lower:
                 cover_last_2=max_cover2
             print(max_cover_num)
-        return subset, score
+        return subset, score, pre, ground
 
     def rank_2(self,test,use_lower=False):
         self.neuron_activate_dense =[]
@@ -317,7 +317,7 @@ class tknc(object):
         self.k=k
         self.neuron_activate_dense =[]
         self.neuron_activate_gl =[]
-        _, _, outputs, self.batch  = self.model.extract_intermediate_outputs(test)
+        self.pre, self.ground, outputs, self.batch  = self.model.extract_intermediate_outputs(test)
         
         datalength = len(test.dataset)
         for l in self.layers:
@@ -363,15 +363,16 @@ class tknc(object):
 
         subset=[]
         lst=list(range(datalength))
+        scroe = []
+        for i in lst:
+            scroe.append( self.fit([i]) )
         initial=np.random.choice(range(datalength))
         lst.remove(initial)
         subset.append(initial)
         max_cover=len(np.unique(neuron[initial]))
 
         cover_now=neuron[initial]
-        scroe = []
-        for i in lst:
-            scroe.append( self.fit([i]) )
+       
         while True:
             flag=False
             for index in tqdm(lst):
@@ -388,7 +389,7 @@ class tknc(object):
             subset.append(max_index)
             cover_now=max_cover_now
             print(max_cover)
-        return subset, scroe
+        return subset, scroe,self.pre, self.ground
 
 ## deepxplore
 class nac(object):
@@ -425,7 +426,7 @@ class nac(object):
     def rank_fast(self,test):
         self.neuron_activate_dense =[]
         self.neuron_activate_gl =[]
-        _, _, outputs, batch  = self.model.extract_intermediate_outputs(test)
+        pre, ground, outputs, batch  = self.model.extract_intermediate_outputs(test)
         datalength = len(test.dataset)
         for l in self.layers:
             if len(outputs[l])  != datalength:
@@ -469,12 +470,12 @@ class nac(object):
             subset.append(max_index)
             cover_last_1=max_cover1
             print(max_cover_num)
-        return subset, score
+        return subset, score,pre, ground
 
     def rank_2(self,test):
         self.neuron_activate_dense =[]
         self.neuron_activate_gl =[]
-        _, _, outputs, batch  = self.model.extract_intermediate_outputs(test)
+        pre, ground, outputs, batch  = self.model.extract_intermediate_outputs(test)
         datalength = len(test.dataset)
         for l in self.layers:
             if len(outputs[l])  != datalength:
@@ -496,4 +497,4 @@ class nac(object):
         upper = np.concatenate(( upper, upper_gl), axis=1)
         score = np.sum(upper, axis=1)/neuron_num
 
-        return np.argsort(np.sum(upper,axis=1))[::-1], score[ np.argsort(np.sum(upper,axis=1))[::-1] ]
+        return np.argsort(np.sum(upper,axis=1))[::-1], score[ np.argsort(np.sum(upper,axis=1))[::-1] ],pre, ground
