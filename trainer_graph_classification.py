@@ -36,12 +36,15 @@ def construct_model(device, savedpath, model_name, load_pre=False):
 def train_and_save(model_name, savedpath="saved_model/gin_imdb_binary/"):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model, args = construct_model(device, savedpath, model_name, load_pre=False) 
+    savedpath  = f"saved_model/{model_name}_{args.data}/"
+    if not os.path.isdir( savedpath ):
+        os.makedirs( savedpath, exist_ok=True )
     #path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     dataset = get_dataset(args.data, normalize=args.normalize) #TUDataset(path, name='COLLAB', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
     dataset = dataset.shuffle()
     train_size = int(len(dataset)*0.8)
     test_size = len(dataset) - train_size
-    train_dataset, test_dataset = torch.utils.data.random_split( dataset, [train_size, test_size], generator=torch.Generator().manual_seed(0))
+    train_dataset, test_dataset = torch.utils.data.random_split( dataset, [train_size, test_size] )
     os.makedirs(savedpath, exist_ok=True)
     torch.save(train_dataset, f"{savedpath}/train.pt")
     torch.save(test_dataset, f"{savedpath}/test.pt")
@@ -108,7 +111,5 @@ if __name__ == "__main__":
     modelparser.add_argument("-t", "--type", type=str, default="mugin", help="gin, mugin")
     #parser.add_argument("-s", "--savedpath", type=str, default="saved_model/mugin_imdb_binary/")
     modelargs = modelparser.parse_known_args()[0]
-    savedpath  = f"saved_model/{modelargs.type}_imdb_binary/"
-    if not os.path.isdir( savedpath ):
-        os.makedirs( savedpath, exist_ok=True )
-    train_and_save(modelargs.type, savedpath )
+    
+    train_and_save(modelargs.type )
