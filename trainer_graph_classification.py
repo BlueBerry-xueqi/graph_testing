@@ -49,7 +49,7 @@ def train_and_save(model_name, savedpath="saved_model/gin_imdb_binary/"):
     torch.save(train_dataset, f"{savedpath}/train.pt")
     torch.save(test_dataset, f"{savedpath}/test.pt")
     test_loader = DataLoader(test_dataset, batch_size=128)
-    train_loader = DataLoader(train_dataset, batch_size=128)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
   
     save_model_layer_bame(model, f"{savedpath}/layers.json")
     model = model.to(device)

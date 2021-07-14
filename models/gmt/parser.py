@@ -5,7 +5,7 @@ class Parser:
     def __init__(self):
 
         self.parser = argparse.ArgumentParser(description='Graph Multiset Transformer')
-        self.parser.add_argument('--type', type=str, required=True)
+        self.parser.add_argument('--type', type=str, required=False)
 
         self.set_arguments()
 
