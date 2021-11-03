@@ -1,3 +1,5 @@
+import pdb
+import sys
 
 from models.gin_graph_classification import Net as GIN
 from models.gat_graph_classification import Net as MuGIN
@@ -17,11 +19,14 @@ from models.data import get_dataset
 
 
 # 用来训练模型的方法
-def construct_model(args, dataset, device, savedpath, model_name, load_pre=False):
+def construct_model(args, dataset, device, savedpath, model_name):
     # path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     # args = Parser().parse()
     # # 得到数据集
     # dataset = get_dataset(args.data, normalize=args.normalize)
+    if args.data == "Cora" and model_name != "cog":
+        print("Error: The model type for cora must be cog!")
+        sys.exit(1)
     if model_name == "gin":
         model = GIN(dataset.num_features, 64, dataset.num_classes, num_layers=3)
     elif model_name == "gat":
@@ -32,12 +37,9 @@ def construct_model(args, dataset, device, savedpath, model_name, load_pre=False
         model = GraphMultisetTransformer(args)
     elif model_name == "gcn":
         model = GCN(dataset.num_features, 64, dataset.num_classes)
-    if args.data == "Cora":
+    elif model_name == "cog":
         model = COG(dataset)
-    if load_pre:
-        print("Load Model Weights")
-        model.load_state_dict(torch.load(f"{savedpath}/pretrained_model.pt", map_location=device))
-    return model, args
+    return model
 
 
 def train_and_save(args):
@@ -49,8 +51,6 @@ def train_and_save(args):
     dataset = get_dataset(args.data,
                           normalize=args.normalize)
     model = construct_model(args, dataset, device, savedpath, model_name, load_pre=False)
-    if args.data == "Cora":
-        model = model[0]
     # 设置一个saved path，放置的是pretrained 模型
     savedpath = f"pretrained_model/{model_name}_{args.data}/"
     # 假如说不存在这个savedpath，那么创建这个savedpath
@@ -74,7 +74,7 @@ def train_and_save(args):
         # 得到一个索引，这个索引是0到数据集长度的一个随机数
         index = torch.randperm(len(dataset))
         # 得到训练集合，测试数据集和测试集
-        train_dataset_index, test_selection_dataset_index, test_dataset_index = index[:train_size], index[
+        train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[
                                                                                                     train_size:train_size + testselection_size], index[
                                                                                                                                                  train_size + testselection_size:]
         # 根据savedpath来创建一个文件夹
@@ -82,41 +82,39 @@ def train_and_save(args):
         # 将训练集的索引存储在这个文件夹下面
         torch.save(train_dataset_index, f"{savedpath}/train_index.pt")
         # 将测试数据的索引存储在这个文件夹下面
-        torch.save(test_selection_dataset_index, f"{savedpath}/test_selection_index.pt")
+        torch.save(test_selection_index, f"{savedpath}/test_selection_index.pt")
         # 将测试集的索引放在测试文件夹下面
         torch.save(test_dataset_index, f"{savedpath}/test_index.pt")
-
-
     else:
         # 加载训练集，测试数据选择集和测试集
         train_dataset_index = torch.load(f"{savedpath}/train_index.pt")
         test_selection_index = torch.load(f"{savedpath}/test_selection_index.pt")
         test_dataset_index = torch.load(f"{savedpath}/test_index.pt")
         # 通过索引得到训练集，测试集和测试数据选择集的真正的数据
-        train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[
-            test_selection_index], dataset[test_dataset_index]
-        # 通过dataset得到测试的loader
-        print(type(train_dataset))
-        if args.data != "Cora":
-            train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-            test_loader = DataLoader(test_dataset, batch_size=128)
-            # 假如说趋于平稳的话，那么久提前结束
-            early_stopping = EarlyStopping(patience=args.patience, verbose=True, path=savedpath)
-        # 将训练好的模型放到layers.json下面
-        # save_model_layer_bame(model, f"{savedpath}/layers.json")
-        # 将模型放到cpu里面
-        model = model.to(device)
-        # model = torch.jit.script(model)
-
-        # 将模型进行优化
+    train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[
+        test_selection_index], dataset[test_dataset_index]
+    # 通过dataset得到测试的loader
+    print(type(train_dataset))
+    if args.data != "Cora":
+        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=128)
+        # 假如说趋于平稳的话，那么久提前结束
+        early_stopping = EarlyStopping(patience=args.patience, verbose=True, path=savedpath)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        # initialize the early_stopping object
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
+    # 将训练好的模型放到layers.json下面
+    # save_model_layer_bame(model, f"{savedpath}/layers.json")
+    # 将模型放到cpu里面
+    model = model.to(device)
+    # 将模型进行优化
+
+    # initialize the early_stopping object
 
     #     假如说
     if args.lr_schedule:
         scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
                                                     args.num_epochs * len(train_loader))
-
     # 用于训练模型的方法
     def train():
         # 将模型的模式调整为训练模式
@@ -211,7 +209,6 @@ def train_and_save(args):
                 break
     if args.data == "Cora":
         torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
-
 
 
 if __name__ == "__main__":
