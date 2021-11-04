@@ -17,7 +17,6 @@ from parser import Parser
 from models.data import get_dataset
 
 
-
 # 用来训练模型的方法
 def construct_model(args, dataset, device, savedpath, model_name):
     # path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
@@ -50,33 +49,28 @@ def train_and_save(args):
     print("args.data是：" + args.data)
     dataset = get_dataset(args.data,
                           normalize=args.normalize)
-    model = construct_model(args, dataset, device, savedpath, model_name, load_pre=False)
-    # 设置一个saved path，放置的是pretrained 模型
     savedpath = f"pretrained_model/{model_name}_{args.data}/"
-    # 假如说不存在这个savedpath，那么创建这个savedpath
+    model = construct_model(args, dataset, device, savedpath, model_name)
+    c = 8
+
     if not os.path.isdir(savedpath):
         os.makedirs(savedpath, exist_ok=True)
     # path = osp.join(osp.dirname(osp.realpath(__file__)), '..', '..', 'data', 'TU')
     # TUDataset(path, name='COLLAB', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
-    # 将dataset 重新洗一下
+
     dataset = dataset.shuffle()
-    # 得到训练集的长短
     train_size = int(len(dataset) * 0.8)
-    # 得到测试选择集的长短
     testselection_size = int(len(dataset) * 0.1)
-    # 得到测试集的长短
     test_size = len(dataset) - train_size - testselection_size
 
-    # check whether the specified path is an existing regular file or not.
-    # 检查一个路径是不是一个正常的文件，假如说不正常的话，直接将应该有的值存储
     if not (os.path.isfile(f"{savedpath}/train_index.pt") and os.path.isfile(
             f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
         # 得到一个索引，这个索引是0到数据集长度的一个随机数
         index = torch.randperm(len(dataset))
         # 得到训练集合，测试数据集和测试集
         train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[
-                                                                                                    train_size:train_size + testselection_size], index[
-                                                                                                                                                 train_size + testselection_size:]
+                                                                                            train_size:train_size + testselection_size], index[
+                                                                                                                                         train_size + testselection_size:]
         # 根据savedpath来创建一个文件夹
         os.makedirs(savedpath, exist_ok=True)
         # 将训练集的索引存储在这个文件夹下面
@@ -94,7 +88,7 @@ def train_and_save(args):
     train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[
         test_selection_index], dataset[test_dataset_index]
     # 通过dataset得到测试的loader
-    print(type(train_dataset))
+
     if args.data != "Cora":
         train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=128)
@@ -115,12 +109,13 @@ def train_and_save(args):
     if args.lr_schedule:
         scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
                                                     args.num_epochs * len(train_loader))
+
     # 用于训练模型的方法
     def train():
         # 将模型的模式调整为训练模式
         model.train()
         # 最开始的时候的loss是0
-        total_loss = 0.
+        total_loss = 0.0
         # 对于train_loader中的数据
         for data in train_loader:
             # 首先把数据放在device(cpu)中
@@ -163,17 +158,11 @@ def train_and_save(args):
 
     @torch.no_grad()
     def test(loader):
-        # 将模型调整到测试状态
         model.eval()
-        # 总的正确的值是0
         total_correct = 0
-        # loss是0
         val_loss = 0
-        # 对于在test loader中的数据
         for data in loader:
-            # 将数据放在device中
             data = data.to(device)
-            # forward的过程
             out = model(data.x, data.edge_index, data.batch)
             loss = F.nll_loss(out, data.y)
             val_loss += loss.item() * data.num_graphs
@@ -182,44 +171,42 @@ def train_and_save(args):
 
         return total_correct / len(loader.dataset), val_loss / len(loader.dataset)
 
-    # 每一个训练过程执行5次
+    # 重复实验
     for epoch in range(1, args.num_epochs):
-        print("epoch: {epoch}")
-        # 得到训练的loss
+        savedpath = f"repeat_exp/{model_name}_{args.data}/"
+        if not os.path.isdir(savedpath):
+            os.makedirs(savedpath, exist_ok=True)
+
         if args.data != "Cora":
             loss = train()
             train_acc, train_loss = test(train_loader)
-            # test准确率和test的loss
             test_acc, test_loss = test(test_loader)
+
         else:
             loss = trainCora()
-            # test准确率和test的loss
             test_acc = testCora(dataset)
-        # 得到
 
-        # 打印出来准确率
-        # print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, '
-        #       f'Train: {train_acc:.4f}, Test: {test_acc:.4f}')
         if args.data != "Cora":
             early_stopping(test_loss, model,
-                       performance={"train_acc": train_acc, "test_acc": test_acc, "train_loss": train_loss,
-                                    "test_loss": test_loss})
+                           performance={"train_acc": train_acc, "test_acc": test_acc, "train_loss": train_loss,
+                                        "test_loss": test_loss})
+
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
+
     if args.data == "Cora":
         torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
 
 
+    def get_accuracy(test_loader):
+        test_acc, test_loss = test(test_loader)
+        with open(f"{savedpath}/xq_test_accuracy.txt", 'a') as f:
+            f.write(str(test_acc) + "\n")
+
+    get_accuracy(test_loader)
+
+
 if __name__ == "__main__":
-    # modelparser = argparse.ArgumentParser(description="Training parser")
-    #
-    # modelparser.add_argument('--type', default='gin', type=str,
-    #                          choices=['gin', 'gat', 'gmt', 'gcn'], required=False)
-    # modelparser.add_argument('--data', type=str, default='DD',
-    #                          choices=['DD', 'Cora', 'PTC_MR'],
-    #                          help='dataset type')
     args = Parser().parse()
-    # parser.add_argument("-s", "--savedpath", type=str, default="pretrained_model/mugin_imdb_binary/")
-    # modelargs = modelparser.parse_known_args()[0]
     train_and_save(args)
