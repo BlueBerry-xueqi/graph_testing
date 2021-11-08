@@ -20,9 +20,6 @@ from models.data import get_dataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-
-
 # construct the original model
 def construct_model(args, dataset, device, savedpath, model_name):
     if args.data == "Cora" and model_name != "cog":
@@ -42,14 +39,13 @@ def construct_model(args, dataset, device, savedpath, model_name):
         model = COG(dataset)
     return model
 
-
 # load dataset
 def loadData(args):
     model_name = args.type
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     dataset = get_dataset(args.data,
                           normalize=args.normalize)
-    savedpath = f"pretrained_model/{model_name}_{args.data}/"
+    savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
     model = construct_model(args, dataset, device, savedpath, model_name)
 
     if not os.path.isdir(savedpath):
@@ -143,14 +139,17 @@ def train(model, train_loader, train_dataset, lr_schedule, train_size):
         if args.lr_schedule:
             scheduler.step()
     return total_loss / len(train_dataset)
+
 # get accuracy of the model
 def get_accuracy(model, test_loader, model_name, dataname):
     # create savedpath for retrained accuracy
-    savedpath_train_accuracy = f"train_accuracy/{model_name}_{dataname}/"
+    savedpath_train_accuracy = f"pretrained_all/train_accuracy/{model_name}_{dataname}/"
     if not os.path.isdir(savedpath_train_accuracy):
         os.makedirs(savedpath_train_accuracy, exist_ok=True)
 
     test_acc, test_loss = test(test_loader, model)
+
+    print("=========="+savedpath_train_accuracy+"============")
     with open(f"{savedpath_train_accuracy}/test_accuracy_3.txt", 'a') as f:
         f.write(str(test_acc) + "\n")
 
@@ -168,7 +167,7 @@ def train_and_save(args):
 
     # train the baseline model
     for epoch in range(1, num_epochs):
-        savedpath = f"pretrained_model/{model_name}_{args.data}/"
+        savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
         if args.data != "Cora":
             # train model
             train(model, train_loader, train_dataset, args.lr_schedule, train_size)
@@ -195,8 +194,6 @@ def train_and_save(args):
         torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
 
     get_accuracy(model, test_loader, args.type, args.data)
-
-
 
 if __name__ == "__main__":
     args = Parser().parse()

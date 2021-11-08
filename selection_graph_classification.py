@@ -15,10 +15,26 @@ from test_metrics.CES import selectsample
 from test_metrics.DeepGini import deepgini_score
 from test_metrics.MCP import MCP_score
 from test_metrics.max_probability import max_score
+from test_metrics.random import random_select
 from trainer_graph_classification import construct_model
 from test_metrics.nc import nbc
 
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# get arguments
+args = Parser().parse()
+
+# get the ratio of the required selected data
+select_ratio = int(args.select_ratio)
+
+# get dataset
+dataset = get_dataset(args.data,
+                      normalize=args.normalize)
+# get dataset size
+dataset_size = len(dataset)
+
+# get the selected number
+select_num = int(dataset_size * select_ratio *0.01)
 
 
 @torch.no_grad()
@@ -45,7 +61,8 @@ def select_functions(model, target_loader, target_data, select_num, metric, save
 
     if metric == "DeepGini":
         scores = deepgini_score(model, target_loader)
-
+    if metric == "random":
+        scores = random_select()
     # if metric == "max_probability":
     #     scores, _, _ = max_score(model, target_loader)
     # if metric == "MCP":
@@ -59,18 +76,21 @@ def select_functions(model, target_loader, target_data, select_num, metric, save
     # if metric == "sihoutete":
     #     scores, _, _ = deepgini_score(model, target_loader)
 
+    # pdb.set_trace()
     # sort by score
     selected_index = np.argsort(scores)[:select_num]
-    # save the index of se;ected dataset
+    # save the index of selected dataset
     torch.save(selected_index, f"{savedpath}/selectedFunctionIndex.pt")
-    selected_loader = DataLoader(target_data[selected_index], batch_size=128)
+    selected_dataset = target_data[selected_index]
+    selected_loader = DataLoader(selected_dataset, batch_size=128)
 
     return selected_loader
 
 
-def loadData(args, savedpath):
+def loadData(args):
     model_name = args.type
-    savedpath = f"pretrained_model/{model_name}_{args.data}/"
+    dataset_name = args.data
+    savedpath = f"pretrained_all/pretrained_model/{model_name}_{dataset_name}"
     dataset = get_dataset(args.data,
                           normalize=args.normalize)  # TUDataset(path, name='COLLAB', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
 
@@ -128,14 +148,15 @@ def retrain(model, test_selection_loader, test_selection_dataset, lr_schedule, t
     model.train()
     total_loss = 0.0
 
-    savedpath_metrics = f"metrics_select_loader/{model_name}_{dataset_name}_{metrics}/selected_data.pt"
+    savedpath_metrics = f"retrained_all/metrics_select_loader/{model_name}_{dataset_name}_{metrics}/selected_data.pt"
     if not os.path.isdir(savedpath_metrics):
         os.makedirs(savedpath_metrics, exist_ok=True)
 
     # dataset selected from test_selection_loader based on metrics
     metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
                                                   select_num, metrics, savedpath_metrics, ncl=None)
-
+    # pdb.set_trace()
+    # retrain model using metrics to select
     for data in metrics_select_data_loader:
         data = data.to(device)
         optimizer.zero_grad()
@@ -155,10 +176,10 @@ def retrain_and_save(args):
     model_name = args.type
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data = args.data
-    select_num = args.select_num
+    metrics = args.metrics
 
     # get dataset
-    savedpath_train = f"pretrained_model/{model_name}_{args.data}/"
+    savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}"
     if not os.path.isdir(savedpath_train):
         print("============== savedpath not exits==============")
 
@@ -179,19 +200,18 @@ def retrain_and_save(args):
     test_loader = DataLoader(test_dataset, batch_size=128)
 
     # savedpath retrain
-    savedpath_retrain = f"retrained_model/{model_name}_{args.data}/"
+    savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/"
     if not os.path.isdir(savedpath_retrain):
         os.makedirs(savedpath_retrain, exist_ok=True)
 
-
     # get basedline model
     model = construct_model(args, dataset, device, savedpath_train, model_name)
-    model.load_state_dict(torch.load(f"pretrained_model/{model_name}_{data}/pretrained_model.pt"))
+    model.load_state_dict(torch.load(f"pretrained_all/pretrained_model/{model_name}_{data}/pretrained_model.pt"))
     model = model.to(device)
     early_stopping = EarlyStopping(patience=args.patience, verbose=True, path=savedpath_retrain)
 
-
     for epoch in range(args.retrain_epochs):
+        # get select loader by metrics
         loss = retrain(model, test_selection_loader, test_selection_dataset, args.lr_schedule, train_size, select_num)
         test_acc, test_loss = test(test_loader, model)
         print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, ')
@@ -199,15 +219,19 @@ def retrain_and_save(args):
         if early_stopping.early_stop:
             print("******** Early stopping")
             break
+    model_name = args.type
+    dataset_name = args.data
 
-    get_accuracy(model, test_loader, args.type, args.data)
+    # get accuracy
+    get_accuracy(model, test_loader, model_name, dataset_name, select_num, metrics)
 
 
 # select retrain data based on metrics
 def select_functions(model, target_loader, target_data, select_num, metric, savedpath, ncl=None):
     if metric == "DeepGini":
         scores = deepgini_score(model, target_loader)
-
+    if metric == "random":
+        scores = random_select()
     if metric == "CES":
         scores = selectsample(args, model, target_loader)
     if metric == "max_probability":
@@ -225,25 +249,24 @@ def select_functions(model, target_loader, target_data, select_num, metric, save
         scores, _, _ = deepgini_score(model, target_loader)
 
     selected_index = np.argsort(scores)[:select_num]
-    torch.save(selected_index, f"{savedpath}/selectedFunctionIndex.pt")
+    torch.save(selected_index, f"{savedpath}/selectedFunctionIndex_{select_num}.pt")
     selected_loader = DataLoader(target_data[selected_index], batch_size=128)
     return selected_loader
 
 
-def get_accuracy(model, test_loader, model_name, dataname):
+def get_accuracy(model, test_loader, model_name, dataname, select_num, metrics):
     # create savedpath for retrained accuracy
-    savedpath_retrain_accuracy = f"retrain_accuracy/{model_name}_{dataname}/"
+    savedpath_retrain_accuracy = f"retrained_all/retrain_accuracy/{metrics}/{model_name}_{dataname}_{select_ratio}"
     if not os.path.isdir(savedpath_retrain_accuracy):
         os.makedirs(savedpath_retrain_accuracy, exist_ok=True)
-
 
     # save file
     test_acc, test_loss = test(test_loader, model)
     with open(f"{savedpath_retrain_accuracy}/retrain_accuracy_3.txt", 'a') as f:
         f.write(str(test_acc) + "\n")
 
+# accuracy when then dataset is selected randomly
 
 if __name__ == "__main__":
     args = Parser().parse()
     retrain_and_save(args)
-
