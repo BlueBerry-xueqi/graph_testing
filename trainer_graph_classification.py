@@ -20,8 +20,10 @@ from models.data import get_dataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
 # construct the original model
-def construct_model(args, dataset, device, savedpath, model_name):
+
+def construct_model(args, dataset, model_name):
     if args.data == "Cora" and model_name != "cog":
         print("Error: The model type for cora must be cog!")
         sys.exit(1)
@@ -39,17 +41,17 @@ def construct_model(args, dataset, device, savedpath, model_name):
         model = COG(dataset)
     return model
 
+
 # load dataset
 def loadData(args):
     model_name = args.type
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     dataset = get_dataset(args.data,
                           normalize=args.normalize)
-    savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
-    model = construct_model(args, dataset, device, savedpath, model_name)
-
+    savedpath = f"pretrained_all/pretrained_data/{model_name}_{args.data}/"
     if not os.path.isdir(savedpath):
         os.makedirs(savedpath, exist_ok=True)
+    model = construct_model(args, dataset, model_name)
     dataset = dataset.shuffle()
     train_size = int(len(dataset) * 0.8)
     testselection_size = int(len(dataset) * 0.1)
@@ -75,13 +77,13 @@ def loadData(args):
     if args.data != "Cora":
         train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=128)
-        early_stopping = EarlyStopping(patience=args.patience, verbose=True, path=savedpath)
+        early_stopping = EarlyStopping(patience=args.patience, verbose=True,
+                                       model_path=f"{savedpath}/model_{args.exp}.pt")
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
 
     model = model.to(device)
-
     if args.lr_schedule:
         scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
                                                     args.num_epochs * len(train_loader))
@@ -103,6 +105,8 @@ def test(loader, model):
         total_correct += pred.eq(data.y).sum().item()
 
     return total_correct / len(loader.dataset), val_loss / len(loader.dataset)
+
+
 @torch.no_grad()
 def testCora(dataset, model):
     model.eval()
@@ -112,6 +116,8 @@ def testCora(dataset, model):
         pred = log_probs[mask].max(1)[1]
         test_acc = pred.eq(dataT.y[mask]).sum().item() / mask.sum().item()
     return test_acc
+
+
 def trainCora(dataset, model, optimizer):
     dataT = dataset[0]
     model.train()
@@ -120,12 +126,14 @@ def trainCora(dataset, model, optimizer):
     total_loss.backward()
     optimizer.step()
     return total_loss
+
+
 # train model
-def train(model, train_loader, train_dataset, lr_schedule, train_size):
+def train(model, train_loader, train_dataset, lr_schedule, train_size, savedpath):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
     if lr_schedule:
         scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * train_size,
-                                                        args.num_epochs * train_size)
+                                                    args.num_epochs * train_size)
     model.train()
     total_loss = 0.0
     for data in train_loader:
@@ -140,62 +148,62 @@ def train(model, train_loader, train_dataset, lr_schedule, train_size):
             scheduler.step()
     return total_loss / len(train_dataset)
 
+
 # get accuracy of the model
-def get_accuracy(model, test_loader, model_name, dataname):
+def get_accuracy(model, test_loader, savedpath_acc):
     # create savedpath for retrained accuracy
-    savedpath_train_accuracy = f"pretrained_all/train_accuracy/{model_name}_{dataname}/"
-    if not os.path.isdir(savedpath_train_accuracy):
-        os.makedirs(savedpath_train_accuracy, exist_ok=True)
 
     test_acc, test_loss = test(test_loader, model)
 
-    print("=========="+savedpath_train_accuracy+"============")
-    with open(f"{savedpath_train_accuracy}/test_accuracy_3.txt", 'a') as f:
+    with open(f"{savedpath_acc}/test_accuracy.txt", 'a') as f:
         f.write(str(test_acc) + "\n")
 
 
 # train and save model -- main class
 def train_and_save(args):
+    print("start")
     # get parameters
     model_name = args.type
-    select_num = args.select_num
-    num_epochs = args.num_epochs
+    num_epochs = args.epochs
 
     # loadData
     model, dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, \
-    test_size, early_stopping= loadData(args)
+    test_size, early_stopping = loadData(args)
 
     # train the baseline model
-    for epoch in range(1, num_epochs):
-        savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
-        if args.data != "Cora":
-            # train model
-            train(model, train_loader, train_dataset, args.lr_schedule, train_size)
+    for exp in range(0, args.exp):
+        for epoch in range(1, num_epochs):
+            savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{epoch}_{exp}/"
+            if not os.path.isdir(savedpath):
+                os.makedirs(savedpath, exist_ok=True)
 
-            # get train accuracy of model
-            train_acc, train_loss = test(train_loader, model)
-            # get test accuracy of model
-            test_acc, test_loss = test(test_loader, model)
+            if args.data != "Cora":
+                # train model
+                train(model, train_loader, train_dataset, args.lr_schedule, train_size, savedpath)
+                # get train accuracy of model
+                train_acc, train_loss = test(train_loader, model)
+                # get test accuracy of model
+                test_acc, test_loss = test(test_loader, model)
 
-        else:
-            loss = trainCora()
-            test_acc = testCora(dataset)
+            else:
+                loss = trainCora()
+                test_acc = testCora(dataset)
 
-        if args.data != "Cora":
-            early_stopping(test_loss, model,
-                           performance={"train_acc": train_acc, "test_acc": test_acc, "train_loss": train_loss,
-                                        "test_loss": test_loss})
+            if args.data != "Cora":
+                torch.save(model.state_dict(), os.path.join(savedpath, "model.pt"))
+                if early_stopping.early_stop:
+                    print("Early stopping")
+                    break
 
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
+            if args.data == "Cora":
+                torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
 
-    if args.data == "Cora":
-        torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
+            savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}_{epoch}_{exp}/"
+            if not os.path.isdir(savedpath_acc):
+                os.makedirs(savedpath_acc, exist_ok=True)
+            get_accuracy(model, test_loader, savedpath_acc)
 
-    get_accuracy(model, test_loader, args.type, args.data)
 
 if __name__ == "__main__":
     args = Parser().parse()
     train_and_save(args)
-
