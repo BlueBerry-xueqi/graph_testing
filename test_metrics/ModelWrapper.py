@@ -1,8 +1,5 @@
-from typing import Tuple
-from scipy.stats.stats import mode
 import torch
 from torch_geometric.nn import global_add_pool
-from torch.nn import Module
 import collections
 
 class ModelWrapper():
@@ -37,7 +34,6 @@ class ModelWrapper():
         pre_labels = torch.cat( pre_labels, dim = 0).detach().cpu().numpy()
         ground_truth = torch.cat(ground_truth, dim = 0).detach().cpu().numpy()
         return pre_prob, pre_labels, ground_truth
-
 
     def extract_intermediate_outputs(self, dataset_loader):
         pre = []
