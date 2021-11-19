@@ -194,6 +194,7 @@ def train_and_save(args):
                 if early_stopping.early_stop:
                     print("Early stopping")
                     break
+                    
 
             if args.data == "Cora":
                 torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
