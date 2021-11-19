@@ -134,6 +134,7 @@ def retrain_and_save(args):
                 os.makedirs(savedpath_retrain, exist_ok=True)
 
             model = construct_model(args, dataset, model_name)
+            model = model.to(device)
             model_path = f"{savedpath_retrain}retrained_model.pt"
 
             if os.path.isfile(model_path):
