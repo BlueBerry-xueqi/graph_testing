@@ -128,43 +128,35 @@ def retrain_and_save(args):
         args)
 
     for exp in range(0, args.exp):
+        savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/{exp}/"
+        if not os.path.isdir(savedpath_retrain):
+            os.makedirs(savedpath_retrain, exist_ok=True)
+        model = construct_model(args, dataset, model_name)
+        model = model.to(device)
+        model_path = f"{savedpath_retrain}retrained_model.pt"
 
-            savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/{exp}_{epoch}/"
-            if not os.path.isdir(savedpath_retrain):
-                os.makedirs(savedpath_retrain, exist_ok=True)
+        if os.path.isfile(model_path):
+            model.load_state_dict(torch.load(model_path, map_location=device))
+        else:
+            savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{epoch}_{exp}/"
+            model.load_state_dict(torch.load(os.path.join(savedpath_train, "model.pt")))
+            early_stopping = EarlyStopping(patience=args.patience, verbose=True, model_path=model_path)
 
-
-            model = construct_model(args, dataset, model_name)
-            model = model.to(device)
-            model_path = f"{savedpath_retrain}retrained_model.pt"
-
-            if os.path.isfile(model_path):
-                model.load_state_dict(torch.load(model_path, map_location=device))
-            else:
-                savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{epoch}_{exp}/"
-                model.load_state_dict(torch.load(os.path.join(savedpath_train, "model.pt")))
-                early_stopping = EarlyStopping(patience=args.patience, verbose=True, model_path=model_path)
-
-                test_selection_size = len(test_selection_index)
-                # get the selected number
-                select_num = math.ceil(np.ceil(test_selection_size * select_ratio * 0.01))
-
-                # dataset selected from test_selection_loader based on metrics
-                metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
+        test_selection_size = len(test_selection_index)
+        # get the selected number
+        select_num = math.ceil(np.ceil(test_selection_size * select_ratio * 0.01))
+        # dataset selected from test_selection_loader based on metrics
+        metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
                                                               select_num, metrics, ncl=None)
-                for epoch in range(args.epochs):
-                    retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
+        for epoch in range(args.epochs):
+            retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
+        torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
 
-                    torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
-                    if early_stopping.early_stop:
-                        print("Early stopping")
-                        break
-
-                    savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
-                    if not os.path.isdir(savedpath_acc):
-                        os.makedirs(savedpath_acc, exist_ok=True)
-                    # get accuracy
-                get_accuracy(model, test_loader, select_ratio, metrics, savedpath_acc)
+        savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
+        if not os.path.isdir(savedpath_acc):
+            os.makedirs(savedpath_acc, exist_ok=True)
+        # get accuracy
+        get_accuracy(model, test_loader, select_ratio, metrics, savedpath_acc)
 
 
 # select retrain data based on metrics
