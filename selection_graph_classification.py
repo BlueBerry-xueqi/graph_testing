@@ -128,10 +128,11 @@ def retrain_and_save(args):
         args)
 
     for exp in range(0, args.exp):
-        for epoch in range(1, args.epochs):
+
             savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/{exp}_{epoch}/"
             if not os.path.isdir(savedpath_retrain):
                 os.makedirs(savedpath_retrain, exist_ok=True)
+
 
             model = construct_model(args, dataset, model_name)
             model = model.to(device)
@@ -151,18 +152,18 @@ def retrain_and_save(args):
                 # dataset selected from test_selection_loader based on metrics
                 metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
                                                               select_num, metrics, ncl=None)
+                for epoch in range(args.epochs):
+                    retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
 
-                retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
+                    torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
+                    if early_stopping.early_stop:
+                        print("Early stopping")
+                        break
 
-                torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
-                if early_stopping.early_stop:
-                    print("Early stopping")
-                    break
-
-                savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
-                if not os.path.isdir(savedpath_acc):
-                    os.makedirs(savedpath_acc, exist_ok=True)
-                # get accuracy
+                    savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
+                    if not os.path.isdir(savedpath_acc):
+                        os.makedirs(savedpath_acc, exist_ok=True)
+                    # get accuracy
                 get_accuracy(model, test_loader, select_ratio, metrics, savedpath_acc)
 
 
