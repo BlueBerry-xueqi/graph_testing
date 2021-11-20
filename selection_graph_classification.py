@@ -149,7 +149,11 @@ def retrain_and_save(args):
         metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
                                                               select_num, metrics, ncl=None)
         for epoch in range(args.epochs):
+<<<<<<< HEAD
             model = retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
+=======
+            retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
+>>>>>>> d6832d15a8bba948a89f6afb4d2ce7236696dc56
         torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
 
         savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
