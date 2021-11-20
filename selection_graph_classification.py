@@ -24,23 +24,6 @@ args = Parser().parse()
 select_ratio = int(args.select_ratio)
 
 
-@torch.no_grad()
-def test(loader, model):
-    model.eval()
-    total_correct = 0
-    val_loss = 0
-
-    for data in tqdm.tqdm(loader):
-        data = data.to(device)
-        out = model(data.x, data.edge_index, data.batch)
-        loss = F.nll_loss(out, data.y)
-        val_loss += loss.item() * data.num_graphs
-        pred = out.max(dim=1)[1]
-        total_correct += pred.eq(data.y).sum().item()
-
-    return total_correct / len(loader.dataset), val_loss / len(loader.dataset)
-
-
 def loadData(args):
     model_name = args.type
     dataset_name = args.data
@@ -127,7 +110,7 @@ def retrain_and_save(args):
     dataset, train_loader, test_selection_loader, test_loader, test_selection_dataset, train_size, test_selection_index = loadData(
         args)
 
-    for exp in range(0, args.exp):
+    for exp in range(args.exp):
         savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/{exp}/"
         if not os.path.isdir(savedpath_retrain):
             os.makedirs(savedpath_retrain, exist_ok=True)
@@ -149,11 +132,7 @@ def retrain_and_save(args):
         metrics_select_data_loader = select_functions(model, test_selection_loader, test_selection_dataset,
                                                               select_num, metrics, ncl=None)
         for epoch in range(args.epochs):
-<<<<<<< HEAD
             model = retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
-=======
-            retrain(model, train_loader, metrics_select_data_loader, args.lr_schedule, train_size, select_num)
->>>>>>> d6832d15a8bba948a89f6afb4d2ce7236696dc56
         torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
 
         savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
