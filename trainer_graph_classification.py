@@ -67,7 +67,6 @@ def loadData(args):
             f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
         train_size = int(len(dataset) * 0.8)
         testselection_size = int(len(dataset) * 0.1)
-        test_size = len(dataset) - train_size - testselection_size
         index = torch.randperm(len(dataset))
         train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[train_size:train_size + testselection_size], index[train_size + testselection_size:]
         torch.save(train_dataset_index, f"{savedpath}/train_index.pt")
@@ -127,47 +126,46 @@ def train_and_save(args):
     dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size = loadData(args)
     # train the baseline model
     best_acc = 0
-    for exp in range(args.exp):
-        savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
-        if not os.path.isdir(savedpath_pretrain):
-            os.makedirs(savedpath_pretrain, exist_ok=True)
-        # get initial model
-        model, early_stopping, optimizer, scheduler = construct_model(args, dataset, train_loader, savedpath_pretrain)
-        for epoch in range(num_epochs):
-            if args.data != "Cora":
-                # train model
-                model.train()
-                total_loss = 0.0
-                for data in train_loader:
-                    data = data.to(device)
-                    optimizer.zero_grad()
-                    out = model(data.x, data.edge_index, data.batch)
-                    loss = F.nll_loss(out, data.y)
-                    loss.backward()
-                    total_loss += loss.item() * data.num_graphs
-                    optimizer.step()
-                    if args.lr_schedule:
-                        scheduler.step()
-                # test model
-                train_acc, train_loss = test(train_loader, model)
-                test_acc, test_loss = test(test_loader, model)
-                early_stopping(test_loss, model, performance={"train_acc":train_acc, "test_acc":test_acc, "train_loss":train_loss, "test_loss":test_loss})
-                if early_stopping.early_stop:
-                    print("Early stopping")
-                    break
-            else:
-                dataT = dataset[0]
-                model.train()
+    savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
+    if not os.path.isdir(savedpath_pretrain):
+        os.makedirs(savedpath_pretrain, exist_ok=True)
+    # get initial model
+    model, early_stopping, optimizer, scheduler = construct_model(args, dataset, train_loader, savedpath_pretrain)
+    for epoch in range(num_epochs):
+        if args.data != "Cora":
+            # train model
+            model.train()
+            total_loss = 0.0
+            for data in train_loader:
+                data = data.to(device)
                 optimizer.zero_grad()
-                total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
-                total_loss.backward()
+                out = model(data.x, data.edge_index, data.batch)
+                loss = F.nll_loss(out, data.y)
+                loss.backward()
+                total_loss += loss.item() * data.num_graphs
                 optimizer.step()
-                acc = testCora(dataset, model)
-                if acc > best_acc:
-                    best_acc = acc
-                    torch.save(model.state_dict(), os.path.join(savedpath_pretrain, "model.pt"))
+                if args.lr_schedule:
+                    scheduler.step()
+            # test model
+            train_acc, train_loss = test(train_loader, model)
+            test_acc, test_loss = test(test_loader, model)
+            early_stopping(test_loss, model, performance={"train_acc":train_acc, "test_acc":test_acc, "train_loss":train_loss, "test_loss":test_loss})
+            if early_stopping.early_stop:
+                print("Early stopping")
+                break
+        else:
+            dataT = dataset[0]
+            model.train()
+            optimizer.zero_grad()
+            total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
+            total_loss.backward()
+            optimizer.step()
+            acc = testCora(dataset, model)
+            if acc > best_acc:
+                best_acc = acc
+                torch.save(model.state_dict(), os.path.join(savedpath_pretrain, "model.pt"))
 
-        savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}_{exp}/"
+        savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}/"
         if not os.path.isdir(savedpath_acc):
             os.makedirs(savedpath_acc, exist_ok=True)
 
