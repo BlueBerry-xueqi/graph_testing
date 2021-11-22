@@ -1,154 +1,81 @@
-import math
-import pdb
 import sys
-
-from transformers import get_cosine_schedule_with_warmup
-from trainer_graph_classification import construct_model
-import tqdm
-from models.pytorchtools import EarlyStopping
+from trainer_graph_classification import construct_model, loadData, test, testCora
 from torch_geometric.data import DataLoader
 import os
 import torch
 import torch.nn.functional as F
 import numpy as np
 from parser import Parser
-from models.data import get_dataset
 from test_metrics.CES import CES_selection, selectsample
 from test_metrics.DeepGini import deepgini_score
 from test_metrics.random import random_select
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# get arguments
-args = Parser().parse()
-
-# get the ratio of the required selected data
-select_ratio = int(args.select_ratio)
-
-
-def loadData(args):
-    model_name = args.type
-    dataset_name = args.data
-    savedpath = f"pretrained_all/pretrained_data/{model_name}_{dataset_name}"
-    dataset = get_dataset(args.data,
-                          normalize=args.normalize)  # TUDataset(path, name='COLLAB', transform=OneHotDegree(135)) #IMDB-BINARY binary classification
-
-    dataset = dataset.shuffle()
-    train_size = int(len(dataset) * 0.8)
-    testselection_size = int(len(dataset) * 0.1)
-    test_size = len(dataset) - train_size - testselection_size
-
-    if not (os.path.isfile(f"{savedpath}/train_index.pt") and os.path.isfile(
-            f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
-        print("ERROR===========The is no prepared dataset(train, test, test_selection)==========")
-    else:
-        train_dataset_index = torch.load(f"{savedpath}/train_index.pt")
-        test_selection_index = torch.load(f"{savedpath}/test_selection_index.pt")
-        test_dataset_index = torch.load(f"{savedpath}/test_index.pt")
-
-        train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[
-            test_selection_index], \
-                                                              dataset[test_dataset_index]
-        train_size = len(train_dataset_index)
-        test_loader = DataLoader(test_dataset, batch_size=100, shuffle=False)
-        test_selection_loader = DataLoader(test_selection_dataset, batch_size=100, shuffle=False)
-        train_loader = DataLoader(train_dataset, batch_size=100, shuffle=True)
-        return dataset, train_loader, test_selection_loader, test_loader, test_selection_dataset, train_size, test_selection_index
-
-
-@torch.no_grad()
-def test(loader, model):
-    model.eval()
-    total_correct = 0
-    val_loss = 0
-
-    for data in tqdm.tqdm(loader):
-        data = data.to(device)
-        out = model(data.x, data.edge_index, data.batch)
-        loss = F.nll_loss(out, data.y)
-        val_loss += loss.item() * data.num_graphs
-        pred = out.max(dim=1)[1]
-        total_correct += pred.eq(data.y).sum().item()
-    return total_correct / len(loader.dataset), val_loss / len(loader.dataset)
-
-
-def retrain(model, train_loader, metrics_select_data_loader, lr_schedule, retrain_size):
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
-    if lr_schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * retrain_size,
-                                                    args.retrain_epochs * retrain_size)
-    model.train()
-    total_loss = 0.0
-    for data in train_loader:
-        data = data.to(device)
-        optimizer.zero_grad()
-        out = model(data.x, data.edge_index, data.batch)
-        loss = F.nll_loss(out, data.y)
-        loss.backward()
-        total_loss += loss.item() * data.num_graphs
-        optimizer.step()
-        if args.lr_schedule:
-            scheduler.step()
-
-    for data in metrics_select_data_loader:
-        data = data.to(device)
-        optimizer.zero_grad()
-        out = model(data.x, data.edge_index, data.batch)
-        loss = F.nll_loss(out, data.y)
-        loss.backward()
-        total_loss += loss.item() * data.num_graphs
-        optimizer.step()
-        if args.lr_schedule:
-            scheduler.step()
-
-    return model
 
 
 def retrain_and_save(args):
+    # load data
+    dataset, train_loader, test_loader, test_selection_loader, train_dataset_index, test_selection_dataset, test_selection_index = loadData(args)
     # get model name and type
     model_name = args.type
-    metrics = args.metrics
 
-    dataset, train_loader, test_selection_loader, test_loader, test_selection_dataset, train_size, test_selection_index = loadData(
-        args)
-
-    for exp in range(args.exp):
-        # get original model
-        modelPretrained = construct_model(args, dataset, model_name)
-        modelPretrained = modelPretrained.to(device)
-        savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
-        model_path = f"{savedpath_train}/model.pt"
-        if os.path.isfile(model_path):
-            modelPretrained.load_state_dict(torch.load(model_path, map_location=device))
-        else:
-            sys.exit()
-        # get retrain dataset
-        test_selection_size = len(test_selection_index)
-        select_num = math.ceil(np.ceil(test_selection_size * select_ratio * 0.01))
-
-
-        metrics_select_data_loader = select_functions(modelPretrained, test_selection_loader, test_selection_dataset, select_num,
-                                                      metrics, ncl=None)
-
-        savedpath_retrain = f"retrained_all/retrained_model/{metrics}/{model_name}_{args.data}/{exp}/"
+    for exp_ID in range(args.exp):
+        savedpath_retrain = f"retrained_all/retrained_model/{args.metrics}/{model_name}_{args.data}/{exp_ID}/"
         if not os.path.isdir(savedpath_retrain):
             os.makedirs(savedpath_retrain, exist_ok=True)
+        # get original model
+        model, _, optimizer, scheduler = construct_model(args, dataset, train_loader, savedpath_retrain)
+        model = model.to(device)
+        savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}/model.pt"
+        if os.path.isfile(savedpath_pretrain):
+            model.load_state_dict(torch.load(savedpath_pretrain, map_location=device))
+        else:
+            print("pre-trained model not exists")
+            sys.exit()
 
-        # get retrain size
-        test_selection_index_size = len(test_selection_index)
-        retrain_size = train_size + test_selection_index_size
+        # get selected dataset
+        select_num = int(np.ceil(len(test_selection_index) * args.select_ratio / 100))
+        selected_index = select_functions(model, test_selection_loader, test_selection_dataset, select_num, args.metrics, ncl=None)
+
+        # combine training set and selected set
+        train_index_new = np.concatenate((train_dataset_index, test_selection_index[selected_index]))
+        train_loader_new = DataLoader(dataset[train_index_new], batch_size=128, shuffle=True)
 
         # retrain process
+        best_acc = 0
         for epoch in range(args.epochs):
-            # retrain model
-            model = retrain(modelPretrained, train_loader, metrics_select_data_loader, args.lr_schedule, retrain_size)
+            if args.data != "Cora":
+                # train model
+                model.train()
+                total_loss = 0.0
+                for data in train_loader_new:
+                    data = data.to(device)
+                    optimizer.zero_grad()
+                    out = model(data.x, data.edge_index, data.batch)
+                    loss = F.nll_loss(out, data.y)
+                    loss.backward()
+                    total_loss += loss.item() * data.num_graphs
+                    optimizer.step()
+                    if args.lr_schedule:
+                        scheduler.step()
+                # test model
+                acc, _ = test(test_loader, model)
+            else:
+                dataT = dataset[0]
+                model.train()
+                optimizer.zero_grad()
+                total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
+                total_loss.backward()
+                optimizer.step()
+                acc = testCora(dataset, model)
+            if acc > best_acc:
+                best_acc = acc
+                torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
 
-        # save model
-        torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
-        savedpath_acc = f"retrained_all/retrain_accuracy/{model_name}_{args.data}/{epoch}_{exp}/"
-        if not os.path.isdir(savedpath_acc):
-            os.makedirs(savedpath_acc, exist_ok=True)
-        # get accuracy
-        get_accuracy(model, test_loader, select_ratio, metrics, savedpath_acc)
+            savedpath_acc = f"retrained_all/train_accuracy/{model_name}_{args.data}/{exp_ID}"
+            if not os.path.isdir(savedpath_acc):
+                os.makedirs(savedpath_acc, exist_ok=True)
+            np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
 
 
 # select retrain data based on metrics
@@ -157,8 +84,8 @@ def select_functions(model, target_loader, target_data, select_num, metric, ncl=
         selected_index = deepgini_score(model, target_loader, select_num)
     elif metric == "random":
         selected_index = random_select(len(target_data), select_num)
-    elif metric == "CES":
-        selected_index = CES_selection(model, target_data, select_num)
+    # elif metric == "CES":
+    #     selected_index = CES_selection(model, target_data, select_num)
     # if metric == "max_probability":
     #     scores, _, _ = max_score(model, target_loader)
     # if metric == "MCP":
@@ -172,24 +99,9 @@ def select_functions(model, target_loader, target_data, select_num, metric, ncl=
     # if metric == "sihoutete":
     #     scores, _, _ = deepgini_score(model, target_loader)
 
-    # selected_index = np.argsort(scores)[:select_num]
-    selected_loader = DataLoader(target_data[selected_index], batch_size=128)
-    return selected_loader
+    return selected_index
 
 
-
-def get_accuracy(model, test_loader, select_ratio, metrics, savedpath_acc):
-    # create savedpath for retrained accuracy
-    if not os.path.isdir(savedpath_acc):
-        os.makedirs(savedpath_acc, exist_ok=True)
-
-    # save file
-    test_acc, test_loss = test(test_loader, model)
-    np.save(f"{savedpath_acc}/{metrics}-{select_ratio}.npy", test_acc)
-    print(test_acc)
-
-
-# accuracy when then dataset is selected randomly
 if __name__ == "__main__":
     args = Parser().parse()
     retrain_and_save(args)
