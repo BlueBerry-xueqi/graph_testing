@@ -161,48 +161,41 @@ def get_accuracy(model, test_loader, savedpath_acc):
 
 # train and save model -- main class
 def train_and_save(args):
-    print("start")
     # get parameters
     model_name = args.type
     num_epochs = args.epochs
 
-    # loadData
-    model, dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, \
-    test_size, early_stopping = loadData(args)
+    # get model and dataset
+    model, dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size, early_stopping = loadData(args)
+    originalModel = model
 
     # train the baseline model
     for exp in range(0, args.exp):
-        for epoch in range(1, num_epochs):
-            savedpath = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{epoch}_{exp}/"
-            if not os.path.isdir(savedpath):
-                os.makedirs(savedpath, exist_ok=True)
-
+        model = originalModel
+        savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
+        if not os.path.isdir(savedpath_train):
+            os.makedirs(savedpath_train, exist_ok=True)
+        for epoch in range(num_epochs):
             if args.data != "Cora":
                 # train model
-                train(model, train_loader, train_dataset, args.lr_schedule, train_size, savedpath)
-                # get train accuracy of model
-                train_acc, train_loss = test(train_loader, model)
-                # get test accuracy of model
-                test_acc, test_loss = test(test_loader, model)
-
-            else:
-                loss = trainCora()
-                test_acc = testCora(dataset)
-
-            if args.data != "Cora":
-                torch.save(model.state_dict(), os.path.join(savedpath, "model.pt"))
+                train(model, train_loader, train_dataset, args.lr_schedule, train_size, savedpath_train)
+                # test model
+                test(test_loader, model)
                 if early_stopping.early_stop:
                     print("Early stopping")
                     break
-                    
 
             if args.data == "Cora":
-                torch.save(model.state_dict(), os.path.join(savedpath, "pretrained_model.pt"))
+                trainCora()
+                testCora(dataset)
 
-            savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}_{epoch}_{exp}/"
-            if not os.path.isdir(savedpath_acc):
-                os.makedirs(savedpath_acc, exist_ok=True)
-            get_accuracy(model, test_loader, savedpath_acc)
+        torch.save(model.state_dict(), os.path.join(savedpath_train, "model.pt"))
+
+        savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}_{exp}/"
+        if not os.path.isdir(savedpath_acc):
+            os.makedirs(savedpath_acc, exist_ok=True)
+
+        get_accuracy(model, test_loader, savedpath_acc)
 
 
 if __name__ == "__main__":
