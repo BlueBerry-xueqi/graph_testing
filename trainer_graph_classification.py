@@ -85,7 +85,7 @@ def loadData(args):
         train_loader = None
         test_loader = None
 
-    return dataset, train_loader, test_loader, train_dataset, test_dataset, len(train_dataset_index), len(test_dataset_index)
+    return dataset, train_loader, test_loader, train_dataset, test_dataset, len(train_dataset_index), test_selection_index
 
 
 @torch.no_grad()
@@ -123,7 +123,7 @@ def train_and_save(args):
     num_epochs = args.epochs
 
     # get dataset
-    dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size = loadData(args)
+    dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, _ = loadData(args)
     # train the baseline model
     best_acc = 0
     savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
