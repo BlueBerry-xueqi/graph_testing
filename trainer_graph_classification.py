@@ -23,45 +23,53 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # construct the original model
 
-def construct_model(args, dataset, model_name):
-    if args.data == "Cora" and model_name != "cog":
+def construct_model(args, dataset, train_loader, model_path):
+    if args.data == "Cora" and args.type != "cog":
         print("Error: The model type for cora must be cog!")
         sys.exit(1)
-    if model_name == "gin":
+    if args.type == "gin":
         model = GIN(dataset.num_features, 64, dataset.num_classes, num_layers=3)
-    elif model_name == "gat":
+    elif args.type == "gat":
         model = MuGIN(dataset.num_features, 32, dataset.num_classes)
-    elif model_name == "gmt":
+    elif args.type == "gmt":
         args.num_features, args.num_classes, args.avg_num_nodes = dataset.num_features, dataset.num_classes, np.ceil(
             np.mean([data.num_nodes for data in dataset]))
         model = GraphMultisetTransformer(args)
-    elif model_name == "gcn":
+    elif args.type == "gcn":
         model = GCN(dataset.num_features, 64, dataset.num_classes)
-    elif model_name == "cog":
+    elif args.type == "cog":
         model = COG(dataset)
-    return model
+
+    if args.data != "Cora":
+        early_stopping = EarlyStopping(patience=args.patience, verbose=True,
+                                       model_path=f"{model_path}/model.pt")
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    else:
+        early_stopping = None
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
+    model = model.to(device)
+    if args.lr_schedule:
+        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
+                                                    args.num_epochs * len(train_loader))
+    else:
+        scheduler = None
+
+    return model, early_stopping, optimizer, scheduler
 
 
 # load dataset
 def loadData(args):
-    model_name = args.type
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = get_dataset(args.data,
-                          normalize=args.normalize)
-    savedpath = f"pretrained_all/pretrained_data/{model_name}_{args.data}/"
+    dataset = get_dataset(args.data, normalize=args.normalize)
+    savedpath = f"pretrained_all/pretrained_data/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath):
         os.makedirs(savedpath, exist_ok=True)
-    model = construct_model(args, dataset, model_name)
     if not (os.path.isfile(f"{savedpath}/train_index.pt") and os.path.isfile(
             f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
         train_size = int(len(dataset) * 0.8)
         testselection_size = int(len(dataset) * 0.1)
         test_size = len(dataset) - train_size - testselection_size
         index = torch.randperm(len(dataset))
-        train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[
-                                                                                            train_size:train_size + testselection_size], index[
-                                                                                                                                         train_size + testselection_size:]
-        os.makedirs(savedpath, exist_ok=True)
+        train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[train_size:train_size + testselection_size], index[train_size + testselection_size:]
         torch.save(train_dataset_index, f"{savedpath}/train_index.pt")
         torch.save(test_selection_index, f"{savedpath}/test_selection_index.pt")
         torch.save(test_dataset_index, f"{savedpath}/test_index.pt")
@@ -69,23 +77,16 @@ def loadData(args):
         train_dataset_index = torch.load(f"{savedpath}/train_index.pt")
         test_selection_index = torch.load(f"{savedpath}/test_selection_index.pt")
         test_dataset_index = torch.load(f"{savedpath}/test_index.pt")
-    train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[
-        test_selection_index], dataset[test_dataset_index]
+    train_dataset, test_selection_dataset, test_dataset = dataset[train_dataset_index], dataset[test_selection_index], dataset[test_dataset_index]
 
     if args.data != "Cora":
         train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=128)
-        early_stopping = EarlyStopping(patience=args.patience, verbose=True,
-                                       model_path=f"{savedpath}/model_{args.exp}.pt")
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
+        train_loader = None
+        test_loader = None
 
-    model = model.to(device)
-    if args.lr_schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
-                                                    args.num_epochs * len(train_loader))
-    return model, dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size, early_stopping
+    return dataset, train_loader, test_loader, train_dataset, test_dataset, len(train_dataset_index), len(test_dataset_index)
 
 
 @torch.no_grad()
@@ -102,7 +103,7 @@ def test(loader, model):
         pred = out.max(dim=1)[1]
         total_correct += pred.eq(data.y).sum().item()
 
-    return total_correct / len(loader.dataset), val_loss / len(loader.dataset)
+    return total_correct / len(loader.dataset), val_loss/len(loader.dataset)
 
 
 @torch.no_grad()
@@ -116,84 +117,64 @@ def testCora(dataset, model):
     return test_acc
 
 
-def trainCora(dataset, model, optimizer):
-    dataT = dataset[0]
-    model.train()
-    optimizer.zero_grad()
-    total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
-    total_loss.backward()
-    optimizer.step()
-    return total_loss
-
-
-# train model
-def train(model, train_loader, train_dataset, lr_schedule, train_size, savedpath):
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
-    if lr_schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * train_size,
-                                                    args.num_epochs * train_size)
-    model.train()
-    total_loss = 0.0
-    for data in train_loader:
-        data = data.to(device)
-        optimizer.zero_grad()
-        out = model(data.x, data.edge_index, data.batch)
-        loss = F.nll_loss(out, data.y)
-        loss.backward()
-        total_loss += loss.item() * data.num_graphs
-        optimizer.step()
-        if args.lr_schedule:
-            scheduler.step()
-    return total_loss / len(train_dataset)
-
-
-# get accuracy of the model
-def get_accuracy(model, test_loader, savedpath_acc):
-    # create savedpath for retrained accuracy
-
-    test_acc, test_loss = test(test_loader, model)
-
-    with open(f"{savedpath_acc}/test_accuracy.txt", 'a') as f:
-        f.write(str(test_acc) + "\n")
-
-
 # train and save model -- main class
 def train_and_save(args):
     # get parameters
     model_name = args.type
     num_epochs = args.epochs
 
-    # get model and dataset
-    model, dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size, early_stopping = loadData(args)
-    originalModel = model
-
+    # get dataset
+    dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, test_size = loadData(args)
     # train the baseline model
+    best_acc = 0
     for exp in range(args.exp):
-        model = originalModel
-        savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
-        if not os.path.isdir(savedpath_train):
-            os.makedirs(savedpath_train, exist_ok=True)
+        savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
+        if not os.path.isdir(savedpath_pretrain):
+            os.makedirs(savedpath_pretrain, exist_ok=True)
+        # get initial model
+        model, early_stopping, optimizer, scheduler = construct_model(args, dataset, train_loader, savedpath_pretrain)
         for epoch in range(num_epochs):
             if args.data != "Cora":
                 # train model
-                train(model, train_loader, train_dataset, args.lr_schedule, train_size, savedpath_train)
+                model.train()
+                total_loss = 0.0
+                for data in train_loader:
+                    data = data.to(device)
+                    optimizer.zero_grad()
+                    out = model(data.x, data.edge_index, data.batch)
+                    loss = F.nll_loss(out, data.y)
+                    loss.backward()
+                    total_loss += loss.item() * data.num_graphs
+                    optimizer.step()
+                    if args.lr_schedule:
+                        scheduler.step()
                 # test model
-                test(test_loader, model)
+                train_acc, train_loss = test(train_loader, model)
+                test_acc, test_loss = test(test_loader, model)
+                early_stopping(test_loss, model, performance={"train_acc":train_acc, "test_acc":test_acc, "train_loss":train_loss, "test_loss":test_loss})
                 if early_stopping.early_stop:
                     print("Early stopping")
                     break
-
-            if args.data == "Cora":
-                trainCora()
-                testCora(dataset)
-
-        torch.save(model.state_dict(), os.path.join(savedpath_train, "model.pt"))
+            else:
+                dataT = dataset[0]
+                model.train()
+                optimizer.zero_grad()
+                total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
+                total_loss.backward()
+                optimizer.step()
+                acc = testCora(dataset, model)
+                if acc > best_acc:
+                    best_acc = acc
+                    torch.save(model.state_dict(), os.path.join(savedpath_pretrain, "model.pt"))
 
         savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}_{exp}/"
         if not os.path.isdir(savedpath_acc):
             os.makedirs(savedpath_acc, exist_ok=True)
 
-        get_accuracy(model, test_loader, savedpath_acc)
+        model.load_state_dict(torch.load(os.path.join(savedpath_pretrain, "model.pt"), map_location=device))
+        if args.data != "Cora":
+            best_acc = test(test_loader, model)
+        np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
 
 
 if __name__ == "__main__":
