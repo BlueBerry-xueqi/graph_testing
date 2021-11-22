@@ -169,7 +169,7 @@ def train_and_save(args):
 
         model.load_state_dict(torch.load(os.path.join(savedpath_pretrain, "model.pt"), map_location=device))
         if args.data != "Cora":
-            best_acc = test(test_loader, model)
+            best_acc, _ = test(test_loader, model)
         np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
 
 
