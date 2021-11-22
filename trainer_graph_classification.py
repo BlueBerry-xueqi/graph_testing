@@ -52,13 +52,11 @@ def loadData(args):
     if not os.path.isdir(savedpath):
         os.makedirs(savedpath, exist_ok=True)
     model = construct_model(args, dataset, model_name)
-    dataset = dataset.shuffle()
-    train_size = int(len(dataset) * 0.8)
-    testselection_size = int(len(dataset) * 0.1)
-    test_size = len(dataset) - train_size - testselection_size
-
     if not (os.path.isfile(f"{savedpath}/train_index.pt") and os.path.isfile(
             f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
+        train_size = int(len(dataset) * 0.8)
+        testselection_size = int(len(dataset) * 0.1)
+        test_size = len(dataset) - train_size - testselection_size
         index = torch.randperm(len(dataset))
         train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[
                                                                                             train_size:train_size + testselection_size], index[
@@ -170,7 +168,7 @@ def train_and_save(args):
     originalModel = model
 
     # train the baseline model
-    for exp in range(0, args.exp):
+    for exp in range(args.exp):
         model = originalModel
         savedpath_train = f"pretrained_all/pretrained_model/{model_name}_{args.data}_{exp}/"
         if not os.path.isdir(savedpath_train):
