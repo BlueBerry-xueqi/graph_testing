@@ -1,10 +1,8 @@
-import pdb
 import sys
 import tqdm
 
 from models.gin_graph_classification import Net as GIN
 from models.gat_graph_classification import Net as MuGIN
-# Where the program gets stuck
 from models.gmt.nets import GraphMultisetTransformer
 from models.gcn_graph_classification import Net as GCN
 from models.gnn_cora import Net as COG
@@ -41,16 +39,14 @@ def construct_model(args, dataset, train_loader, model_path):
         model = COG(dataset)
 
     if args.data != "Cora":
-        early_stopping = EarlyStopping(patience=args.patience, verbose=True,
-                                       model_path=f"{model_path}/model.pt")
+        early_stopping = EarlyStopping(patience=args.patience, verbose=True, model_path=f"{model_path}/model.pt")
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     else:
         early_stopping = None
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
     model = model.to(device)
     if args.lr_schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
-                                                    args.num_epochs * len(train_loader))
+        scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader), args.num_epochs * len(train_loader))
     else:
         scheduler = None
 
@@ -80,12 +76,14 @@ def loadData(args):
 
     if args.data != "Cora":
         train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=128)
+        test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+        test_selection_loader = DataLoader(test_selection_dataset, batch_size=100, shuffle=False)
     else:
         train_loader = None
         test_loader = None
+        test_selection_loader = None
 
-    return dataset, train_loader, test_loader, train_dataset, test_dataset, len(train_dataset_index), test_selection_index
+    return dataset, train_loader, test_loader, test_selection_loader, train_dataset_index, test_selection_dataset, test_selection_index
 
 
 @torch.no_grad()
@@ -123,7 +121,7 @@ def train_and_save(args):
     num_epochs = args.epochs
 
     # get dataset
-    dataset, train_loader, test_loader, train_dataset, test_dataset, train_size, _ = loadData(args)
+    dataset, train_loader, test_loader, _, _, _, _ = loadData(args)
     # train the baseline model
     best_acc = 0
     savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
