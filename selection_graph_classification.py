@@ -48,14 +48,12 @@ def retrain_and_save(args):
             if args.data != "Cora":
                 # train model
                 model.train()
-                total_loss = 0.0
                 for data in train_loader_new:
                     data = data.to(device)
                     optimizer.zero_grad()
                     out = model(data.x, data.edge_index, data.batch)
                     loss = F.nll_loss(out, data.y)
                     loss.backward()
-                    total_loss += loss.item() * data.num_graphs
                     optimizer.step()
                     if args.lr_schedule:
                         scheduler.step()
