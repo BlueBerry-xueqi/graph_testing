@@ -40,9 +40,10 @@ def retrain_and_save(args):
         # combine training set and selected set
         train_index_new = np.concatenate((train_dataset_index, test_selection_index[selected_index]))
         train_loader_new = DataLoader(dataset[train_index_new], batch_size=128, shuffle=True)
-
+            
+        if args.data != "Cora":
+            best_acc, _ = test(test_loader, model)
         # retrain process
-        best_acc = 0
         for epoch in range(args.epochs):
             if args.data != "Cora":
                 # train model
@@ -61,13 +62,15 @@ def retrain_and_save(args):
                 # test model
                 acc, _ = test(test_loader, model)
             else:
-                dataT = dataset[0]
-                model.train()
-                optimizer.zero_grad()
-                total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
-                total_loss.backward()
-                optimizer.step()
-                acc = testCora(dataset, model)
+                print("Not implemented")
+                sys.exit()
+#                 dataT = dataset[0]
+#                 model.train()
+#                 optimizer.zero_grad()
+#                 total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
+#                 total_loss.backward()
+#                 optimizer.step()
+#                 acc = testCora(dataset, model)
             if acc > best_acc:
                 best_acc = acc
                 torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
