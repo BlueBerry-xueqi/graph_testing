@@ -1,4 +1,7 @@
+import pdb
 import sys
+
+from test_metrics.max_probability import max_score
 from trainer_graph_classification import construct_model, loadData, test, testCora
 from torch_geometric.data import DataLoader
 import os
@@ -15,7 +18,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def retrain_and_save(args):
     # load data
-    dataset, train_loader, test_loader, test_selection_loader, train_dataset_index, test_selection_dataset, test_selection_index = loadData(args)
+    dataset, train_loader, test_loader, test_selection_loader, train_dataset_index, test_selection_dataset, test_selection_index = loadData(
+        args)
     # get model name and type
     model_name = args.type
 
@@ -35,60 +39,61 @@ def retrain_and_save(args):
 
         # get selected dataset
         select_num = int(np.ceil(len(test_selection_index) * args.select_ratio / 100))
-        selected_index = select_functions(model, test_selection_loader, test_selection_dataset, select_num, args.metrics, ncl=None)
-
+        selected_index = select_functions(model, test_selection_loader, test_selection_dataset, select_num,
+                                          args.metrics)
         # combine training set and selected set
         train_index_new = np.concatenate((train_dataset_index, test_selection_index[selected_index]))
         train_loader_new = DataLoader(dataset[train_index_new], batch_size=128, shuffle=True)
-            
-        if args.data != "Cora":
-            best_acc, _ = test(test_loader, model)
+
         # retrain process
+        best_acc = 0
         for epoch in range(args.epochs):
             if args.data != "Cora":
                 # train model
                 model.train()
+                total_loss = 0.0
                 for data in train_loader_new:
                     data = data.to(device)
                     optimizer.zero_grad()
                     out = model(data.x, data.edge_index, data.batch)
                     loss = F.nll_loss(out, data.y)
                     loss.backward()
+                    total_loss += loss.item() * data.num_graphs
                     optimizer.step()
                     if args.lr_schedule:
                         scheduler.step()
                 # test model
                 acc, _ = test(test_loader, model)
             else:
-                print("Not implemented")
-                sys.exit()
-#                 dataT = dataset[0]
-#                 model.train()
-#                 optimizer.zero_grad()
-#                 total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
-#                 total_loss.backward()
-#                 optimizer.step()
-#                 acc = testCora(dataset, model)
+                dataT = dataset[0]
+                model.train()
+                optimizer.zero_grad()
+                total_loss = F.nll_loss(model()[dataT.train_mask], dataT.y[dataT.train_mask])
+                total_loss.backward()
+                optimizer.step()
+                acc = testCora(dataset, model)
             if acc > best_acc:
                 best_acc = acc
                 torch.save(model.state_dict(), os.path.join(savedpath_retrain, "model.pt"))
 
-            savedpath_acc = f"retrained_all/train_accuracy/{model_name}_{args.data}/{exp_ID}"
+            savedpath_acc = f"retrained_all/train_accuracy/{args.metrics}/{model_name}_{args.data}/{exp_ID}"
             if not os.path.isdir(savedpath_acc):
                 os.makedirs(savedpath_acc, exist_ok=True)
-            np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+            np.save(f"{savedpath_acc}/test_accuracy_ratio{args.select_ratio}.npy", best_acc)
 
 
 # select retrain data based on metrics
-def select_functions(model, target_loader, target_data, select_num, metric, ncl=None):
+def select_functions(model, target_loader, target_data, select_num, metric):
     if metric == "DeepGini":
         selected_index = deepgini_score(model, target_loader, select_num)
     elif metric == "random":
         selected_index = random_select(len(target_data), select_num)
+    elif metric == "max_probability":
+        selected_index = max_score(model, target_loader, select_num)
+
     # elif metric == "CES":
     #     selected_index = CES_selection(model, target_data, select_num)
-    # if metric == "max_probability":
-    #     scores, _, _ = max_score(model, target_loader)
+
     # if metric == "MCP":
     #     scores = MCP_score(model, target_loader, ncl)
     # # if metric == "ModelWrapper":

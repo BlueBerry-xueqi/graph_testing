@@ -61,8 +61,8 @@ def loadData(args):
         os.makedirs(savedpath, exist_ok=True)
     if not (os.path.isfile(f"{savedpath}/train_index.pt") and os.path.isfile(
             f"{savedpath}/test_selection_index.pt") and os.path.isfile(f"{savedpath}/test_index.pt")):
-        train_size = int(len(dataset) * 0.8)
-        testselection_size = int(len(dataset) * 0.1)
+        train_size = int(len(dataset) * 0.5)
+        testselection_size = int(len(dataset) * 0.25)
         index = torch.randperm(len(dataset))
         train_dataset_index, test_selection_index, test_dataset_index = index[:train_size], index[train_size:train_size + testselection_size], index[train_size + testselection_size:]
         torch.save(train_dataset_index, f"{savedpath}/train_index.pt")
@@ -169,7 +169,7 @@ def train_and_save(args):
 
         model.load_state_dict(torch.load(os.path.join(savedpath_pretrain, "model.pt"), map_location=device))
         if args.data != "Cora":
-            best_acc, _ = test(test_loader, model)
+            best_acc = test(test_loader, model)
         np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
 
 
