@@ -12,7 +12,7 @@ def max_score(model, target_loader, select_num):
             data = data.to(device)
             output = model(data.x, data.edge_index, data.batch)
             y_pred = torch.softmax(output, dim=1)
-            score = np.max(np.exp(torch.Tensor.cpu(y_pred).detach().numpy()), axis=1)
+            score = np.max(torch.Tensor.cpu(y_pred).detach().numpy(), axis=1)
             scores = np.concatenate((scores, score))
 
     scores_sort = np.argsort(scores)[::-1]
