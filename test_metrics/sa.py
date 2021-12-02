@@ -1,16 +1,17 @@
+import torch
 import numpy as np
-import time
-import os
-
 from multiprocessing import Pool
 from tqdm import tqdm
-
 from scipy.stats import gaussian_kde
 from scipy import linalg
-from numpy import  (atleast_2d, pi,cov)
+from numpy import (atleast_2d, pi, cov)
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class refined_gaussian_kde(gaussian_kde):
-      # https://github.com/mdhaber/scipy/blob/61d3223e61722018f007b9cbfc3241e0fb85ce61/scipy/stats/kde.py
-      def _compute_covariance(self):
+    # https://github.com/mdhaber/scipy/blob/61d3223e61722018f007b9cbfc3241e0fb85ce61/scipy/stats/kde.py
+    def _compute_covariance(self):
         """Computes the covariance matrix for each Gaussian kernel using
         covariance_factor().
         """
@@ -19,64 +20,38 @@ class refined_gaussian_kde(gaussian_kde):
         # Cache covariance and inverse covariance of the data
         if not hasattr(self, '_data_inv_cov'):
             self._data_covariance = atleast_2d(cov(self.dataset, rowvar=1,
-                                               bias=False,
-                                               aweights=self.weights))
+                                                   bias=False,
+                                                   aweights=self.weights))
             # Small multiple of identity added to covariance matrix for
             # numerical stability. Fixes gh-10205. For justification, see
             # https://juanitorduz.github.io/multivariate_normal/ and primary
             # source http://www.gaussianprocess.org/gpml/chapters/RWA.pdf
-            eps_I = 1e-8*np.eye(self.d)
+            eps_I = 1e-8 * np.eye(self.d)
             self._data_covariance += eps_I
             self._data_inv_cov = linalg.inv(self._data_covariance)
 
-        self.covariance = self._data_covariance * self.factor**2
-        self.inv_cov = self._data_inv_cov / self.factor**2
-        #e=np.linalg.eigvalsh(self.covariance*2*pi)
-        #print(min(e))
-        L = linalg.cholesky(self.covariance*2*pi)
-        self.log_det = 2*np.log(np.diag(L)).sum()
-
+        self.covariance = self._data_covariance * self.factor ** 2
+        self.inv_cov = self._data_inv_cov / self.factor ** 2
+        # e=np.linalg.eigvalsh(self.covariance*2*pi)
+        # print(min(e))
+        L = linalg.cholesky(self.covariance * 2 * pi)
+        self.log_det = 2 * np.log(np.diag(L)).sum()
 
 
 def _aggr_output(x):
     return [np.mean(x[..., j]) for j in range(x.shape[-1])]
 
 
-def _get_saved_path(base_path, dataset, dtype, layer_names):
-    """Determine saved path of ats and pred
-
-    Args:
-        base_path (str): Base save path.
-        dataset (str): Name of dataset.
-        dtype (str): Name of dataset type (e.g., train, test, fgsm, ...).
-        layer_names (list): List of layer names.
-
-    Returns:
-        ats_path: File path of ats.
-        pred_path: File path of pred (independent of layers)
-    """
-
-    joined_layer_names = "_".join(layer_names)
-    return (
-        os.path.join(
-            base_path,
-            dataset + "_" + dtype + "_" + joined_layer_names + "_ats" + ".npy",
-        ),
-        os.path.join(base_path, dataset + "_" + dtype + "_pred" + ".npy"),
-         os.path.join(base_path, dataset + "_" + dtype + "_groundtruth" + ".npy")
-    )
-
-
 def get_ats(
-    model,
-    dataset,
-    name,
-    layer_names,
-    save_path=None,
-    batch_size=128,
-    is_classification=True,
-    num_classes=10,
-    num_proc=10,
+        model,
+        dataset,
+        name,
+        layer_names,
+        save_path=None,
+        batch_size=128,
+        is_classification=True,
+        num_classes=10,
+        num_proc=10,
 ):
     """Extract activation traces of dataset from model.
 
@@ -106,7 +81,12 @@ def get_ats(
     if is_classification:
         p = Pool(num_proc)
         print(prefix + "Model serving")
-        pred, ground_truth, layer_outputs  = model.extract_intermediate_outputs(dataset)
+        with torch.no_grad():
+            for data in dataset:
+                data = data.to(device)
+                output = model(data.x, data.edge_index, data.batch)
+                y_pred = torch.softmax(output, dim=1)
+        pred, ground_truth, layer_outputs = model.extract_intermediate_outputs(dataset)
         # if len(layer_names) == 1:
         #     layer_outputs = [
         #         temp_model.predict(dataset, batch_size=batch_size, verbose=1)
@@ -118,7 +98,7 @@ def get_ats(
 
         print(prefix + "Processing ATs")
         ats = None
-        for ( layer_name, layer_output ) in layer_outputs.items():
+        for (layer_name, layer_output) in layer_outputs.items():
             print("Layer: " + layer_name)
             if layer_output[0].ndim == 3:
                 # For convolutional layers
@@ -134,21 +114,16 @@ def get_ats(
                 ats = np.append(ats, layer_matrix, axis=1)
                 layer_matrix = None
 
-    if save_path is not None:
-        np.save(save_path[0], ats)
-        np.save(save_path[1], pred)
-        np.save(save_path[2], ground_truth)
-
-    return ats, pred, ground_truth
+    return ats, pred
 
 
 def find_closest_at(at, train_ats):
     """The closest distance between subject AT and training ATs.
 
     Args:
-        at (list): List of activation traces of an input.        
+        at (list): List of activation traces of an input.
         train_ats (list): List of activation traces in training set (filtered)
-        
+
     Returns:
         dist (int): The closest distance.
         at (list): Training activation trace that has the closest distance.
@@ -158,7 +133,7 @@ def find_closest_at(at, train_ats):
     return (min(dist), train_ats[np.argmin(dist)])
 
 
-def _get_train_target_ats(model, x_train, x_target, target_name, layer_names, **kwargs):
+def _get_train_target_ats(model, x_train, x_target, target_name, layer_names):
     """Extract ats of train and target inputs. If there are saved files, then skip it.
 
     Args:
@@ -176,49 +151,28 @@ def _get_train_target_ats(model, x_train, x_target, target_name, layer_names, **
         target_pred (list): pred of target set.
     """
 
-    saved_train_path = _get_saved_path(kwargs["save_path"], kwargs["d"], "train", layer_names)
-    if os.path.exists(saved_train_path[0]) and os.path.exists(saved_train_path[1]) and os.path.exists(saved_train_path[2]):
-        print(infog("Found saved {} ATs, skip serving".format("train")))
-        # In case train_ats is stored in a disk
-        train_ats = np.load(saved_train_path[0])
-        train_pred = np.load(saved_train_path[1])
-    else:
-        train_ats, train_pred,_ = get_ats(
-            model,
-            x_train,
-            "train",
-            layer_names,
-            num_classes=kwargs["num_classes"],
-            is_classification=kwargs["is_classification"],
-            save_path=saved_train_path,
-        )
-        print(infog("train ATs is saved at " + saved_train_path[0]))
-
-    saved_target_path = _get_saved_path(
-        kwargs["save_path"], kwargs["d"], target_name, layer_names
+    train_ats, train_pred, _ = get_ats(
+        model,
+        x_train,
+        "train",
+        layer_names,
+        num_classes=10,
+        is_classification=True,
     )
-    if os.path.exists(saved_target_path[0]) and os.path.exists(saved_target_path[1]) and os.path.exists(saved_target_path[2]):
-        print(infog("Found saved {} ATs, skip serving").format(target_name))
-        # In case target_ats is stored in a disk
-        target_ats = np.load(saved_target_path[0])
-        target_pred = np.load(saved_target_path[1])
-        ground_truth_target =  np.load(saved_target_path[2])
-    else:
-        target_ats, target_pred, ground_truth_target = get_ats(
-            model,
-            x_target,
-            target_name,
-            layer_names,
-            num_classes=kwargs["num_classes"],
-            is_classification=kwargs["is_classification"],
-            save_path=saved_target_path,
-        )
-        print(infog(target_name + " ATs is saved at " + saved_target_path[0]))
 
-    return train_ats, train_pred, target_ats, target_pred, ground_truth_target
+    target_ats, target_pred = get_ats(
+        model,
+        x_target,
+        target_name,
+        layer_names,
+        num_classes=10,
+        is_classification=True,
+    )
+
+    return train_ats, train_pred, target_ats, target_pred
 
 
-def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
+def fetch_dsa(model, x_train, x_target, target_name, layer_names, select_num):
     """Distance-based SA
 
     Args:
@@ -228,16 +182,15 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
         target_name (str): Name of target set.
         layer_names (list): List of selected layer names.
         args: keyboard args.
+        select_num: size of selected datasets
 
     Returns:
         dsa (list): List of dsa for each target input.
     """
 
-    assert kwargs["is_classification"] == True
-
     prefix = info("[" + target_name + "] ")
     train_ats, train_pred, target_ats, target_pred, ground_truth_target = _get_train_target_ats(
-        model, x_train, x_target, target_name, layer_names, **kwargs
+        model, x_train, x_target, target_name, layer_names
     )
 
     class_matrix = {}
@@ -259,7 +212,9 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, **kwargs):
         )
         dsa.append(a_dist / b_dist)
 
-    return dsa, target_pred, ground_truth_target 
+    scores_sort = np.argsort(dsa)
+    select_index = scores_sort[-select_num:]
+    return select_index
 
 
 def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
@@ -282,8 +237,8 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
             col_vectors = np.transpose(train_ats[class_matrix[label]])
             for i in range(col_vectors.shape[0]):
                 if (
-                    np.var(col_vectors[i]) < kwargs["var_threshold"]
-                    and i not in removed_cols
+                        np.var(col_vectors[i]) < kwargs["var_threshold"]
+                        and i not in removed_cols
                 ):
                     removed_cols.append(i)
 
@@ -337,7 +292,7 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
     """
 
     prefix = info("[" + target_name + "] ")
-    train_ats, train_pred, target_ats, target_pred, ground_truth_target  = _get_train_target_ats(
+    train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
         model, x_train, x_target, target_name, layer_names, **kwargs
     )
 
@@ -362,7 +317,7 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
         for at in tqdm(target_ats):
             lsa.append(_get_lsa(kde, at, removed_cols))
 
-    return lsa, target_pred, ground_truth_target
+    return lsa, target_pred
 
 
 def get_sc(lower, upper, k, sa):
@@ -384,6 +339,8 @@ def get_sc(lower, upper, k, sa):
 
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_curve, auc
+
+
 class Colors:
     HEADER = "\033[95m"
     OKBLUE = "\033[94m"
