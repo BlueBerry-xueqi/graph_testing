@@ -14,29 +14,21 @@ import pandas as pd
 import argparse
 # import condition
 import numpy as np
-<<<<<<< HEAD
 
 CLIP_MAX = 0.5
 
 
 def find_second(act, ncl=10):
-=======
-CLIP_MAX = 0.5
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def find_second(act, matrix_size):
->>>>>>> 3533dc3257a775f78a7faee15381d0bbe036c694
     max_ = 0
     second_max = 0
     sec_index = 0
     max_index = 0
-    for i in range(matrix_size):
+    for i in range(ncl):
         if act[i] > max_:
             max_ = act[i]
             max_index = i
 
-    for i in range(matrix_size):
+    for i in range(ncl):
         if i == max_index:
             continue
         if act[i] > second_max:
@@ -47,7 +39,6 @@ def find_second(act, matrix_size):
     return max_index, sec_index, ratio
 
 
-<<<<<<< HEAD
 # for wilds datasets
 def select_wilds_only(model, selectsize, x_target, ncl):
     window_size = int(ncl * ncl)
@@ -70,48 +61,33 @@ def select_wilds_only(model, selectsize, x_target, ncl):
 
 
 def select_from_firstsec_dic(selectsize, dicratio, dicindex, ncl=10):
-=======
-# 配对表情非空的数目。比如第一是3，第二是5，此时里面没有任何实例存在那么就是0
-def no_empty_number(dicratio):
-    no_empty = 0
-    for i in range(len(dicratio)):
-        if len(dicratio[i]) != 0:
-            no_empty += 1
-    return no_empty
-
-
-# 输入第一第二大的字典，输出selected_lst。用例的index
-def select_from_firstsec_dic(selectsize, dicratio, dicindex, ms):
->>>>>>> 3533dc3257a775f78a7faee15381d0bbe036c694
     selected_lst = []
     tmpsize = selectsize
 
     noempty = no_empty_number(dicratio)
-<<<<<<< HEAD
     # print(selectsize)
     # print(noempty)
     window_size = int(ncl * ncl)
     while selectsize >= noempty:
         for i in range(window_size):
             if len(dicratio[i]) != 0:
-=======
-    # 待选择的数目大于非空的类别数(满载90类)，每一个都选一个
-    while selectsize >= noempty:
-        for i in range(ms):
-            if len(dicratio[i]) != 0:  # 非空就选一个最大的出来
->>>>>>> 3533dc3257a775f78a7faee15381d0bbe036c694
                 tmp = max(dicratio[i])
                 j = dicratio[i].index(tmp)
+                # if tmp>=0.1:
                 selected_lst.append(dicindex[i][j])
                 dicratio[i].remove(tmp)
                 dicindex[i].remove(dicindex[i][j])
         selectsize = tmpsize - len(selected_lst)
         noempty = no_empty_number(dicratio)
+        # print(selectsize)
+    # selectsize<noempty
+    # no_empty_number(dicratio)
+    # print(selectsize)
 
     while len(selected_lst) != tmpsize:
         max_tmp = [0 for i in range(selectsize)]  # 剩下多少就申请多少
         max_index_tmp = [0 for i in range(selectsize)]
-        for i in range(ms):
+        for i in range(window_size):
             if len(dicratio[i]) != 0:
                 tmp_max = max(dicratio[i])
                 if tmp_max > min(max_tmp):
@@ -124,11 +100,12 @@ def select_from_firstsec_dic(selectsize, dicratio, dicindex, ms):
             print('wrong!!!!!!')
             break
         selected_lst = selected_lst + max_index_tmp
+        print(len(selected_lst))
+    # print(selected_lst)
     assert len(selected_lst) == tmpsize
     return selected_lst
 
 
-<<<<<<< HEAD
 def no_empty_number(dicratio):
     no_empty = 0
     for i in range(len(dicratio)):
@@ -201,26 +178,3 @@ def margin_score(model, target_data):
     prediction_sorted = np.sort(prediction)
     margin_list = prediction_sorted[:, -1] / prediction_sorted[:, -2]
     return margin_list, pre_labels, ground_truth
-=======
-def mcp_score(model, target_loader, num, class_num):
-    dicratio = [[] for i in range(class_num * class_num)]  # 只用90，闲置10个
-    dicindex = [[] for i in range(class_num * class_num)]
-    model.eval()
-    with torch.no_grad():
-        for batch_no, (x_batch, _) in enumerate(target_loader):
-            x_batch = x_batch.to(device)
-            output = model(x_batch)
-            output_copy = funSoft(torch.Tensor.cpu(output)).detach().numpy()
-            for i in range(len(output_copy)):
-                index_in_data = batch_size * batch_no + i
-                act = output_copy[i]
-                max_index, sec_index, ratio = find_second(act, class_num)
-                # 安装第一和第二大的标签来存储，比如第一是8，第二是4，那么就存在84里，比例和测试用例的序号
-                dicratio[max_index * class_num + sec_index].append(ratio)
-                dicindex[max_index * class_num + sec_index].append(index_in_data)
-    mcp_list = select_from_firstsec_dic(num, dicratio, dicindex, class_num * class_num)
-    select_index = mcp_list[:num]
-    
-    return select_index
-
->>>>>>> 3533dc3257a775f78a7faee15381d0bbe036c694

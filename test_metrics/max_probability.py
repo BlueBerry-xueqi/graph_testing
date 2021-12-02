@@ -15,7 +15,6 @@ def max_score(model, target_loader, select_num):
             score = np.max(torch.Tensor.cpu(y_pred).detach().numpy(), axis=1)
             scores = np.concatenate((scores, score))
 
-    scores_sort = np.argsort(scores)[::-1]
-    select_index = scores_sort[-select_num:]
-    select_index = torch.from_numpy(np.flip(select_index, axis=0).copy())
+    select_index = np.argsort(scores)[::-1][:select_num]
+    select_index = select_index.copy()
     return select_index

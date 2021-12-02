@@ -18,7 +18,6 @@ def deepgini_score(model, target_loader, select_num):
             scores = np.concatenate((scores, gini_score))
 
     # sort through ascending order
-    scores_sort = np.argsort(scores)[::-1]
-    select_index = scores_sort[-select_num:]
-    select_index = torch.from_numpy(np.flip(select_index, axis=0).copy())
+    select_index = np.argsort(scores)[::-1][:select_num]
+    select_index = select_index.copy()
     return select_index
