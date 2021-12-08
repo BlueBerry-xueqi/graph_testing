@@ -1,9 +1,13 @@
 import os.path
 
+
 import torch
-from torch_geometric.datasets import TUDataset
+from torch_geometric.datasets import TUDataset, Planetoid
 from torch_geometric.utils import degree
 import torch_geometric.transforms as T
+
+import os.path as osp
+
 
 class NormalizedDegree(object):
     def __init__(self, mean, std):
@@ -16,8 +20,22 @@ class NormalizedDegree(object):
         data.x = deg.view(-1, 1)
         return data
 
+
 def get_dataset(name, sparse=True, cleaned=False, normalize=False):
-    dataset = TUDataset(os.path.join('./data', name), name, use_node_attr=True, cleaned=cleaned)
+    transform = T.Compose([
+        T.RandomNodeSplit(num_val=500, num_test=500),
+        T.TargetIndegree(),
+    ])
+    if name == "Cora":
+        dataset = 'Cora'
+        path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
+        dataset = Planetoid(path, dataset, transform=transform)
+        # dataset = Planetoid(os.path.join('./data', name), name, transform=transform)
+        print("=== data info ===")
+        print(f" Num Class {dataset.num_classes}\n")
+        print(f" Num Nodes {dataset.data.num_nodes}\n")
+    else:
+        dataset = TUDataset(os.path.join('./data', name), name, use_node_attr=True, cleaned=cleaned)
     dataset.data.edge_attr = None
 
     if dataset.data.x is None:
@@ -51,6 +69,7 @@ def get_dataset(name, sparse=True, cleaned=False, normalize=False):
                 [dataset.transform, T.ToDense(max_num_nodes)])
 
     return dataset
+
 
 def num_graphs(data):
     if data.batch is not None:

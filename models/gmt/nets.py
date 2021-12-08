@@ -37,7 +37,7 @@ class GraphRepresentation(torch.nn.Module):
         for _ in range(self.args.num_convs):
 
             if self.args.conv == 'GCN':
-            
+
                 conv = GCNConv(_input_dim, _output_dim)
 
             elif self.args.conv == 'GIN':
@@ -92,7 +92,8 @@ class GraphMultisetTransformer(GraphRepresentation):
         self.pools = self.get_pools()
         self.classifier = self.get_classifier()
 
-    def forward(self,  x, edge_index, batch):
+    def forward(self, data):
+        x, edge_index, batch = data.x, data.edge_index, data.batch
 
         #x, edge_index, batch = data.x, data.edge_index, data.batch
 
@@ -146,7 +147,7 @@ class GraphMultisetTransformer(GraphRepresentation):
         for _index, _model_str in enumerate(self.model_sequence):
 
             if (_index == len(self.model_sequence) - 1) and (reconstruction == False):
-                
+
                 _num_nodes = 1
 
             if _model_str == 'GMPool_G':
@@ -243,7 +244,7 @@ class GraphMultisetTransformer_for_OGB(GraphMultisetTransformer):
         for _ in range(self.args.num_convs):
 
             if self.args.conv == 'GCN':
-            
+
                 conv = GCNConv_for_OGB(self.nhid)
 
             elif self.args.conv == 'GIN':
@@ -262,7 +263,7 @@ class GraphMultisetTransformer_for_ZINC(GraphMultisetTransformer):
 
         self.pools = self.get_pools(_input_dim=self.nhid, reconstruction=True)
         self.unconvs = self.get_unconvs()
-        
+
     def forward(self, data):
 
         x, edge_index, batch = data.x, data.edge_index, data.batch
@@ -271,7 +272,7 @@ class GraphMultisetTransformer_for_ZINC(GraphMultisetTransformer):
         for _ in range(self.args.num_convs):
 
             x = F.relu(self.convs[_](x, edge_index))
-            
+
         # Pooling
         for _index, _model_str in enumerate(self.model_sequence):
 
@@ -295,7 +296,7 @@ class GraphMultisetTransformer_for_ZINC(GraphMultisetTransformer):
 
         # Decoder
         x = torch.bmm(attn.transpose(1, 2), batch_x)
-        
+
         x = x[mask]
 
         for _ in range(self.args.num_unconvs):
@@ -321,7 +322,7 @@ class GraphMultisetTransformer_for_ZINC(GraphMultisetTransformer):
                 _output_dim = self.num_features
 
             if self.args.conv == 'GCN':
-            
+
                 conv = GCNConv(_input_dim, _output_dim)
 
             elif self.args.conv == 'GIN':

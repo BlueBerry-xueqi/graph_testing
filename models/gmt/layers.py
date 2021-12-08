@@ -11,6 +11,7 @@ from torch_geometric.utils import to_dense_batch
 
 from ogb.graphproppred.mol_encoder import BondEncoder
 
+# gmt模型训练的代码
 class MAB(nn.Module):
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False, cluster=False, conv=None):
         super(MAB, self).__init__()

@@ -3,8 +3,9 @@ import torch
 import os
 import json
 class EarlyStopping:
+    print("Start")
     """Early stops the training if validation loss doesn't improve after a given patience."""
-    def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt', trace_func=print):
+    def __init__(self, patience=7, verbose=False, delta=0, model_path='checkpoint.pt', trace_func=print):
         """
         Args:
             patience (int): How long to wait after last time validation loss improved.
@@ -25,9 +26,10 @@ class EarlyStopping:
         self.early_stop = False
         self.val_loss_min = np.Inf
         self.delta = delta
-        self.path = path
+        self.model_path = model_path
         self.trace_func = trace_func
     def __call__(self, val_loss, model, **kwarg):
+        print("call is executed")
 
         score = -val_loss
 
@@ -48,13 +50,12 @@ class EarlyStopping:
         '''Saves model when validation loss decrease.'''
         if self.verbose:
             self.trace_func(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), os.path.join(self.path, "saved_model.pt"))
-        with open(os.path.join(self.path, "performance.json"), "w") as f:
-            json.dump(kwarg["performance"], f )
-          
+        torch.save(model.state_dict(), self.model_path)
+
         self.val_loss_min = val_loss
 
 def save_model_layer_bame(model, saved_path):
+    print("saved model later is excuted")
     layers=[]
     with open(saved_path, "w") as f:
         for (name, _) in model.named_modules():
