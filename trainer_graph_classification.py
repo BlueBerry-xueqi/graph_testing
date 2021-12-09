@@ -1,12 +1,11 @@
 import copy
-import pdb
-import sys
-import tqdm
 from models.GNN_models import Net as GNN
 from models.gin_graph_classification import Net as GIN
 from models.gat_graph_classification import Net as GAT
 from models.gmt.nets import GraphMultisetTransformer as GMT
 from models.gcn_graph_classification import GCNConv as GCN
+from models.Tudataset_models.gin_network import GIN as TUGIN
+from models.Tudataset_models.gnn_architectures import GINWithJK as GINJFK, GINE0, GINE, GINEWithJK
 
 from models.pytorchtools import EarlyStopping, save_model_layer_bame
 from torch_geometric.data import DataLoader
@@ -37,6 +36,14 @@ def construct_model(args, dataset, train_loader, model_path):
         model = GCN(dataset.num_features, dataset.num_classes)
     elif args.type == "gnn":
         model = GNN(dataset)
+    elif args.type == "TUGIN":
+        model = TUGIN(dataset, 5, 64)
+    elif args.type == "GINJFK":
+        model = GINJFK(dataset, 5, 64)
+    elif args.type == "GINE":
+        model = GINE(dataset, 3, 64)
+    elif args.type == "GINEJFK":
+        model = GINEWithJK(dataset, 3, 64)
 
     early_stopping = EarlyStopping(patience=args.patience, verbose=True, model_path=f"{model_path}/model.pt")
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
