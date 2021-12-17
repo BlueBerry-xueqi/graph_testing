@@ -7,14 +7,13 @@ import numpy
 from test_metrics.Entropy import entropy
 from test_metrics.Margin import margin_score
 from test_metrics.max_probability import max_score
-from trainer_graph_classification import construct_model, test
+from trainer_graph_classification import construct_model, Coratest, Coratrain
 import os
 import torch
 import numpy as np
 from parser import Parser
 from test_metrics.DeepGini import deepgini_score
 from test_metrics.random import random_select
-from trainer_graph_classification import train
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -108,9 +107,9 @@ def retrain_and_save(args):
         best_acc = 0
         best_val_acc = test_acc = 0
         for epoch in range(args.retrain_epochs):
-            train(model, optimizer, data, new_train_index)
+            Coratrain(model, optimizer, data, new_train_index)
 
-            train_acc, val_acc, tmp_test_acc = test(model, data, train_index, val_index, test_index)
+            train_acc, val_acc, tmp_test_acc = Coratest(model, data, train_index, val_index, test_index)
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
                 test_acc = tmp_test_acc
@@ -174,3 +173,4 @@ def select_functions(model, retrain_index, select_num, metric, data):
 if __name__ == "__main__":
     args = Parser().parse()
     retrain_and_save(args)
+ github

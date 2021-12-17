@@ -7,8 +7,13 @@ import torch
 import numpy as np
 from parser import Parser
 import os.path as osp
-from models.geometric_models.GCN_model import Net as GCN, train, test
+from models.geometric_models.GCN_model import Net as GCN
 import torch_geometric.transforms as T
+from models.geometric_models.GAT import Net as GAT
+from models.geometric_models.AGNN import Net as AGNN
+from models.geometric_models.ARMA import Net as ARMA
+from models.geometric_models.SGC import Net as SGC
+import torch.nn.functional as F
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -22,6 +27,25 @@ def construct_model(args, dataset, model_path):
             dict(params=model.conv1.parameters(), weight_decay=5e-4),
             dict(params=model.conv2.parameters(), weight_decay=0)
         ], lr=0.01)
+
+    elif args.type == "GAT":
+        model = GAT(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=5e-4)
+
+    elif args.type == "AGNN":
+        model = AGNN(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    elif args.type == "ARMA":
+        model = ARMA(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    elif args.type == "SGC":
+        model = SGC(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.2, weight_decay=0.005)
+
+
+
+
+
 
     return model, optimizer
 
@@ -39,7 +63,6 @@ def loadData(args):
     index = torch.randperm(len(data.y))
     train_index, val_index, test_index, retrain_index = index[:4 * n], index[4 * n:5 * n], index[5 * n: 6 * n], index[
                                                                                                                 6 * n:]
-
 
     # save index path
     savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"
@@ -68,8 +91,8 @@ def train_and_save(args):
     n = int(len(dataset) / 10)
 
     for epoch in range(args.epochs):
-        train(model, optimizer, data, train_index)
-        train_acc, val_acc, tmp_test_acc = test(model, data, train_index, val_index, test_index)
+        Coratrain(model, optimizer, data, train_index)
+        train_acc, val_acc, tmp_test_acc = Coratest(model, data, train_index, val_index, test_index)
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             test_acc = tmp_test_acc
@@ -90,6 +113,25 @@ def train_and_save(args):
     # save best model
     torch.save(best_model, os.path.join(savedpath_pretrain, "model.pt"))
     np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+
+
+def Coratrain(model, optimizer, data, train_index):
+    model.train()
+    optimizer.zero_grad()
+    F.nll_loss(model(data)[train_index], data.y[train_index]).backward()
+    optimizer.step()
+
+
+@torch.no_grad()
+def Coratest(model, data, train_index, val_index, test_index):
+    list_index = [train_index, val_index, test_index]
+    model.eval()
+    logits, accs = model(data), []
+    for index in list_index:
+        pred = logits[index].max(1)[1]
+        acc = pred.eq(data.y[index]).sum().item() / len(index)
+        accs.append(acc)
+    return accs
 
 
 if __name__ == "__main__":
