@@ -1,157 +1,127 @@
 import copy
-from models.GNN_models import Net as GNN
-from models.gin_graph_classification import Net as GIN
-from models.gat_graph_classification import Net as GAT
-from models.gmt.nets import GraphMultisetTransformer as GMT
-from models.gcn_graph_classification import GCNConv as GCN
-from models.Tudataset_models.gin_network import GIN as TUGIN
-from models.Tudataset_models.gnn_architectures import GINWithJK as GINJFK, GINE0, GINE, GINEWithJK
+import pdb
 
-from models.pytorchtools import EarlyStopping, save_model_layer_bame
-from torch_geometric.data import DataLoader
-from torch_geometric.datasets import TUDataset
+from torch_geometric.datasets import TUDataset, Planetoid
 import os
 import torch
-import torch.nn.functional as F
 import numpy as np
 from parser import Parser
-
 import os.path as osp
+from models.geometric_models.GCN_model import Net as GCN
+import torch_geometric.transforms as T
+from models.geometric_models.GAT import Net as GAT
+from models.geometric_models.AGNN import Net as AGNN
+from models.geometric_models.ARMA import Net as ARMA
+import torch.nn.functional as F
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # construct the original model
-
-def construct_model(args, dataset, train_loader, model_path):
-    if args.type == "gin":
-        model = GIN(dataset.num_features, 64, dataset.num_classes, num_layers=3)
-    elif args.type == "gat":
-        model = GAT(dataset.num_features, 32, dataset.num_classes)
-    elif args.type == "gmt":
-        args.num_features, args.num_classes, args.avg_num_nodes = dataset.num_features, dataset.num_classes, np.ceil(
-            np.mean([data.num_nodes for data in dataset]))
-        model = GMT(args)
-    elif args.type == "gcn":
+def construct_model(args, dataset, model_path):
+    if args.type == "GCN":
         model = GCN(dataset.num_features, dataset.num_classes)
-    elif args.type == "gnn":
-        model = GNN(dataset)
-    elif args.type == "TUGIN":
-        model = TUGIN(dataset, 5, 64)
-    elif args.type == "GINJFK":
-        model = GINJFK(dataset, 5, 64)
-    elif args.type == "GINE":
-        model = GINE(dataset, 3, 64)
-    elif args.type == "GINEJFK":
-        model = GINEWithJK(dataset, 3, 64)
 
-    early_stopping = EarlyStopping(patience=args.patience, verbose=True, model_path=f"{model_path}/model.pt")
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    # if args.lr_schedule:
-    #     scheduler = get_cosine_schedule_with_warmup(optimizer, args.patience * len(train_loader),
-    #                                                 args.num_epochs * len(train_loader))
-    # else:
-    #     scheduler = None
+        optimizer = torch.optim.Adam([
+            dict(params=model.conv1.parameters(), weight_decay=5e-4),
+            dict(params=model.conv2.parameters(), weight_decay=0)
+        ], lr=0.01)
 
-    return model, early_stopping, optimizer
+    elif args.type == "GAT":
+        model = GAT(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=5e-4)
+
+    elif args.type == "AGNN":
+        model = AGNN(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    elif args.type == "ARMA":
+        model = ARMA(dataset.num_features, dataset.num_classes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    return model, optimizer
 
 
 # load dataset
 def loadData(args):
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', args.data)
-    dataset = TUDataset(path, name=args.data)
-    dataset = dataset.shuffle()
-    savedpath = f"pretrained_all/pretrained_data/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath):
-        os.makedirs(savedpath, exist_ok=True)
-    n = len(dataset) // 10
-    train_dataset = dataset[:n * 4]
-    retrain_dataset = dataset[n * 4:n * 8]
-    test_dataset = dataset[n * 8:]
+    dataset = 'Cora'
+    path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
+    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
+    data = dataset[0]
+    data = data.to(device)
 
-    torch.save(dataset, f"{savedpath}/dataset.pt")
-    train_loader = DataLoader(train_dataset, batch_size=60, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=60, shuffle=False)
-    retrain_loader = DataLoader(retrain_dataset, batch_size=60, shuffle=False)
+    # split data : train:val:test;retrain = 4:1:1:4
+    n = int(len(data.y) / 10)
+    index = torch.randperm(len(data.y))
+    train_index, val_index, test_index, retrain_index = index[:4 * n], index[4 * n:5 * n], index[5 * n: 6 * n], index[
+                                                                                                                6 * n:]
 
-    return dataset, train_loader, retrain_loader, test_loader, train_dataset, retrain_dataset, test_dataset
+    # save index path
+    savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"
+    if not os.path.isdir(savedpath_index):
+        os.makedirs(savedpath_index, exist_ok=True)
 
-
-def train(model, train_loader, optimizer, train_dataset):
-    model.train()
-    loss_all = 0
-    for data in train_loader:
-        data = data.to(device)
-        optimizer.zero_grad()
-        output = model(data)
-        loss = F.nll_loss(output, data.y)
-        loss.backward()
-        loss_all += data.num_graphs * loss.item()
-        optimizer.step()
-    return loss_all / len(train_dataset)
+    # save index
+    torch.save(dataset, f"{savedpath_index}/dataset.pt")
+    torch.save(train_index, f"{savedpath_index}/train_index.pt")
+    torch.save(val_index, f"{savedpath_index}/val_index.pt")
+    torch.save(test_index, f"{savedpath_index}/test_index.pt")
+    torch.save(retrain_index, f"{savedpath_index}/retrain_index.pt")
+    return data, dataset, train_index, val_index, test_index, retrain_index
 
 
-@torch.no_grad()
-def test(loader, model):
-    model.eval()
-    correct = 0
-    val_loss = 0
-    for data in loader:
-        data = data.to(device)
-
-        out = model(data)
-        loss = F.nll_loss(out, data.y)
-        val_loss += loss.item() * data.num_graphs
-
-        pred = out.max(dim=1)[1]
-        correct += pred.eq(data.y).sum().item()
-    return correct / len(loader.dataset), val_loss / len(loader.dataset)
-
-
-# train and save model -- main class
 def train_and_save(args):
-    # get parameters
-    model_name = args.type
-    num_epochs = args.epochs
-
-    # get dataset
-    dataset, train_loader, retrain_loader, test_loader, train_dataset, retrain_dataset, test_dataset = loadData(args)
-    # train the baseline model
-    best_acc = 0
-    savedpath_pretrain = f"pretrained_all/pretrained_model/{model_name}_{args.data}/"
+    savedpath_pretrain = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_pretrain):
         os.makedirs(savedpath_pretrain, exist_ok=True)
-    # get initial model
-    model, early_stopping, optimizer = construct_model(args, dataset, train_loader, savedpath_pretrain)
-    model = model.to(device)
-    for epoch in range(num_epochs):
-        loss = train(model, train_loader, optimizer, train_dataset)
-        # if args.lr_schedule:
-        #     scheduler.step()
 
-        train_acc, train_loss = test(train_loader, model)
-        test_acc, test_loss = test(test_loader, model)
+    data, dataset, train_index, val_index, test_index, retrain_index = loadData(args)
+    model, optimizer = construct_model(args, dataset, savedpath_pretrain)
+    model = model.to(device)
+    best_acc = 0
+    best_val_acc = test_acc = 0
+    n = int(len(dataset) / 10)
+
+    for epoch in range(args.epochs):
+        Coratrain(model, optimizer, data, train_index)
+        train_acc, val_acc, tmp_test_acc = Coratest(model, data, train_index, val_index, test_index)
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            test_acc = tmp_test_acc
 
         if test_acc > best_acc:
             best_acc = test_acc
             best_model = copy.deepcopy(model.state_dict())
 
-        # early_stopping(test_loss, model,
-        #                performance={"train_acc": train_acc, "test_acc": test_acc, "train_loss": train_loss,
-        #                             "test_loss": test_loss})
-        # if early_stopping.early_stop:
-        #     print("Early stopping")
-        #     break
+        print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
+              f'Test: {test_acc:.4f}')
+    print(best_acc)
 
-        print(f'Epoch: {epoch:03d}, Loss: {loss:.5f}, Train Acc: {train_acc:.5f}, '
-              f'Test Acc: {test_acc:.5f}')
-
-    savedpath_acc = f"pretrained_all/train_accuracy/{model_name}_{args.data}/"
+    # save best acc
+    savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    print("Best acc", best_acc)
+
+    # save best model
     torch.save(best_model, os.path.join(savedpath_pretrain, "model.pt"))
     np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+
+
+def Coratrain(model, optimizer, data, train_index):
+    model.train()
+    optimizer.zero_grad()
+    F.nll_loss(model(data)[train_index], data.y[train_index]).backward()
+    optimizer.step()
+
+
+@torch.no_grad()
+def Coratest(model, data, train_index, val_index, test_index):
+    list_index = [train_index, val_index, test_index]
+    model.eval()
+    logits, accs = model(data), []
+    for index in list_index:
+        pred = logits[index].max(1)[1]
+        acc = pred.eq(data.y[index]).sum().item() / len(index)
+        accs.append(acc)
+    return accs
 
 
 if __name__ == "__main__":
