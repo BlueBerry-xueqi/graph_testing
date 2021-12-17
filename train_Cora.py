@@ -5,6 +5,8 @@ from torch_geometric.datasets import TUDataset, Planetoid
 import os
 import torch
 import numpy as np
+
+from data import get_dataset
 from parser import Parser
 import os.path as osp
 from models.geometric_models.GCN_model import Net as GCN
@@ -12,7 +14,6 @@ import torch_geometric.transforms as T
 from models.geometric_models.GAT import Net as GAT
 from models.geometric_models.AGNN import Net as AGNN
 from models.geometric_models.ARMA import Net as ARMA
-from models.geometric_models.SGC import Net as SGC
 import torch.nn.functional as F
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -38,24 +39,19 @@ def construct_model(args, dataset, model_path):
     elif args.type == "ARMA":
         model = ARMA(dataset.num_features, dataset.num_classes)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
-    elif args.type == "SGC":
-        model = SGC(dataset.num_features, dataset.num_classes)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.2, weight_decay=0.005)
-
-
-
-
-
-
     return model, optimizer
 
 
 # load dataset
 def loadData(args):
-    dataset = 'Cora'
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
-    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
-    data = dataset[0]
+    if args.data == "Cora":
+        dataset = 'Cora'
+        path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
+        dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
+        data = dataset[0]
+    else:
+        dataset = get_dataset(args.data, normalize=args.normalize)
+        dataset = dataset.shuffle()
     data = data.to(device)
 
     # split data : train:val:test;retrain = 4:1:1:4
@@ -88,7 +84,6 @@ def train_and_save(args):
     model = model.to(device)
     best_acc = 0
     best_val_acc = test_acc = 0
-    n = int(len(dataset) / 10)
 
     for epoch in range(args.epochs):
         Coratrain(model, optimizer, data, train_index)
