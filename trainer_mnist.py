@@ -77,29 +77,31 @@ def train_and_save(args):
         MNIST_train(epoch, train_loader, model, optimizer)
         train_acc = MNIST_test(train_loader, train_dataset, model)
         val_acc = MNIST_test(val_loader, val_dataset, model)
-        tmp_test_acc = MNIST_test(test_loader, test_dataset, model)
-
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            test_acc = tmp_test_acc
-
-        if test_acc > best_acc:
-            best_acc = test_acc
+        # select best test accuracy and save best model
+        if val_acc > best_acc:
+            best_acc = val_acc
             best_model = copy.deepcopy(model.state_dict())
 
         print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-              f'Test: {test_acc:.4f}')
-    print(best_acc)
+              f'Val: {val_acc:.4f}')
+    print("Best val acuracy is: ", best_acc)
 
+    # save best model
     savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_model):
         os.makedirs(savedpath_model, exist_ok=True)
     torch.save(best_model, os.path.join(savedpath_model, "model.pt"))
 
+    # load best model, and get test accuracy
+    model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
+    test_acc = MNIST_test(test_loader, test_dataset, model)
+    print("best test accuracy is: ", test_acc)
+
+    # save best accuracy
     savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ def construct_model(args, dataset):
 def Cora_load_Data(args):
     dataset = 'Cora'
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
-    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
+    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures()).shuffle()
     data = dataset[0]
     data = data.to(device)
 
@@ -75,35 +75,36 @@ def train_and_save(args):
     model = model.to(device)
 
     best_acc = 0
-    best_val_acc = test_acc = 0
-
     for epoch in range(args.epochs):
         Cora_train(model, optimizer, data, train_index)
-        train_acc, val_acc, tmp_test_acc = Cora_test(model, data, train_index, val_index, test_index)
+        train_acc = Cora_test(model, data, train_index)
+        val_acc = Cora_test(model, data, val_index)
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            test_acc = tmp_test_acc
-
-        if test_acc > best_acc:
-            best_acc = test_acc
+        # select best test accuracy and save best model
+        if val_acc > best_acc:
+            best_acc = val_acc
             best_model = copy.deepcopy(model.state_dict())
 
         print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-              f'Test: {test_acc:.4f}')
-    print(best_acc)
+              f'Val: {val_acc:.4f}')
+    print("Best val acuracy is: ", best_acc)
 
     # save best model
-    savedpath_pretrain = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath_pretrain):
-        os.makedirs(savedpath_pretrain, exist_ok=True)
-    torch.save(best_model, os.path.join(savedpath_pretrain, "model.pt"))
+    savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
+    if not os.path.isdir(savedpath_model):
+        os.makedirs(savedpath_model, exist_ok=True)
+    torch.save(best_model, os.path.join(savedpath_model, "model.pt"))
+
+    # load best model, and get test accuracy
+    model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
+    test_acc = Cora_test(model, data, test_index)
+    print("best test accuracy is: ", test_acc)
 
     # save best accuracy
     savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
 
 
 def Cora_train(model, optimizer, data, train_index):
@@ -114,15 +115,12 @@ def Cora_train(model, optimizer, data, train_index):
 
 
 @torch.no_grad()
-def Cora_test(model, data, train_index, val_index, test_index):
-    list_index = [train_index, val_index, test_index]
+def Cora_test(model, data, index):
     model.eval()
-    logits, accs = model(data), []
-    for index in list_index:
-        pred = logits[index].max(1)[1]
-        acc = pred.eq(data.y[index]).sum().item() / len(index)
-        accs.append(acc)
-    return accs
+    logits = model(data)
+    pred = logits[index].max(1)[1]
+    acc = pred.eq(data.y[index]).sum().item() / len(index)
+    return acc
 
 
 if __name__ == "__main__":
