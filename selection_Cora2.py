@@ -4,23 +4,22 @@ import sys
 
 import numpy as np
 import torch
-from torch_geometric.loader import DataLoader
 
-from models.geometric_models.mnist_nn_conv import train as MNIST_train, test as MNIST_test
 from parser import Parser
-from test_metrics.TU_metrics.Kmeans_selection import Kmeans_metrics
-from trainer_mnist import construct_model
+from test_metrics.Cora_metrics.Cora_DeepGini import DeepGini_metrics
+from test_metrics.Cora_metrics.Cora_random import random_select
+from test_metrics.Cora_metrics.Cora_BALD import BALD_metrics
+from test_metrics.Cora_metrics.Cora_Margin import margin_metrics
+from test_metrics.Cora_metrics.Cora_Kmeans_selection import Kmeans_metrics
+from test_metrics.Cora_metrics.Cora_Entropy import entropy_metrics
+from test_metrics.Cora_metrics.Cora_least_confidence import least_confidence_metrics
 
-from test_metrics.MNIST_metrics.M_Margin import margin_metrics
-from test_metrics.MNIST_metrics.M_random import random_select
-from test_metrics.MNIST_metrics.M_Entropy import entropy_metrics
-from test_metrics.MNIST_metrics.M_DeepGini import DeepGini_metrics
-from test_metrics.MNIST_metrics.M_least_confidence import least_confidence_metrics
+from trainer_Cora2 import construct_model, Cora_test, Cora_train
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def loadData():
+def Cora_loadData(args):
     savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"
 
     if not (os.path.isfile(f"{savedpath_index}/train_index.pt") and os.path.isfile(
@@ -29,40 +28,32 @@ def loadData():
         print("No prepared index")
     else:
         dataset = torch.load(f"{savedpath_index}/dataset.pt")
+        data = dataset[0]
+        data = data.to(device)
         train_index = torch.load(f"{savedpath_index}/train_index.pt")
         val_index = torch.load(f"{savedpath_index}/val_index.pt")
         test_index = torch.load(f"{savedpath_index}/test_index.pt")
         retrain_index = torch.load(f"{savedpath_index}/retrain_index.pt")
-        # get dataset
-        train_dataset = dataset[train_index]
-        val_dataset = dataset[val_index]
-        test_dataset = dataset[test_index]
-        retrain_dataset = dataset[retrain_index]
 
-        train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-        retrain_loader = DataLoader(retrain_dataset, batch_size=64, shuffle=False)
-
-    return dataset, train_index, test_index, retrain_index, train_loader, val_loader, test_loader, retrain_loader, train_dataset, val_dataset, test_dataset, retrain_dataset
+    return data, dataset, train_index, val_index, test_index, retrain_index
 
 
 def retrain_and_save(args):
-    dataset, train_index, test_index, retrain_index, train_loader, val_loader, test_loader, retrain_loader, train_dataset, val_dataset, test_dataset, retrain_dataset = loadData()
+    data, dataset, train_index, val_index, test_index, retrain_index = Cora_loadData(args)
     test_acc_exp = 0
 
-    # do three exps
     for exp_ID in range(args.exp):
         print("exp", exp_ID, "...")
 
+        # construct original model
         model, optimizer = construct_model(args, dataset)
         model = model.to(device)
 
         ratio = args.select_ratio
-        ratio_pre = ratio - 10
+        ratio_pre = ratio - 5
 
         # the first retrain use the pretrained model
-        if ratio == 10:
+        if ratio == 5:
             savedpath_pre = f"pretrained_all/pretrained_model/{args.type}_{args.data}/model.pt"
             if os.path.isfile(savedpath_pre):
                 model.load_state_dict(torch.load(savedpath_pre, map_location=device))
@@ -72,7 +63,7 @@ def retrain_and_save(args):
                 sys.exit()
 
         # for other's use the previous retrained model
-        if not ratio == 10:
+        if not ratio == 5:
             savedpath_previous = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/model{ratio_pre}.pt"
             # load model from previous model
             if os.path.isfile(savedpath_previous):
@@ -82,25 +73,19 @@ def retrain_and_save(args):
                 print("retrained model not exists")
                 sys.exit()
 
-        len_retrain_set = len(retrain_dataset)
-        select_num = int(ratio / 100 * len_retrain_set)
+        retrain_length = len(retrain_index)
+        select_num = int(ratio / 100 * retrain_length)
 
-        # get select index using metrics
-        select_index = select_functions(model, len_retrain_set, args.metrics, retrain_loader, select_num)
+        select_index = Cora_select_functions(model, retrain_index, args.metrics, data, select_num)
         new_select_index = retrain_index[select_index]
         new_train_index = np.concatenate((new_select_index, train_index))
-        new_train_dataset = dataset[new_train_index]
-        new_train_dataset = new_train_dataset.shuffle()
-        new_train_loader = DataLoader(new_train_dataset, batch_size=64, shuffle=True)
 
-        # initiallize the best accuracy
+
         best_acc = 0
         best_val_acc = test_acc = 0
         for epoch in range(args.retrain_epochs):
-            MNIST_train(epoch, new_train_loader, model, optimizer)
-            train_acc = MNIST_test(new_train_loader, new_train_dataset, model)
-            val_acc = MNIST_test(val_loader, val_dataset, model)
-            tmp_test_acc = MNIST_test(test_loader, test_dataset, model)
+            Cora_train(model, optimizer, data, new_train_index)
+            train_acc, val_acc, tmp_test_acc = Cora_test(model, data, new_train_index, val_index, test_index)
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
@@ -109,8 +94,10 @@ def retrain_and_save(args):
             if test_acc > best_acc:
                 best_model = copy.deepcopy(model.state_dict())
                 best_acc = test_acc
+
             print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
                   f'Test: {test_acc:.4f}')
+
         print("exp ID: ", exp_ID, ", best accuracy is：", best_acc)
 
         if best_acc > test_acc_exp:
@@ -126,27 +113,28 @@ def retrain_and_save(args):
         os.makedirs(savedpath_model, exist_ok=True)
     torch.save(best_exp_model, os.path.join(savedpath_model, f"model{ratio}.pt"))
 
-    # save the best accuracy
+    # save best accuracy
     savedpath_acc = f"retrained_all/train_accuracy/{args.type}_{args.data}/{args.metrics}"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
     np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc_exp)
 
 
-def select_functions(model, retrain_dataset_length, metric, retrain_loader, select_num):
+def Cora_select_functions(model, retrain_index, metric, data, select_num):
     if metric == "deepgini":
-        selected_index = DeepGini_metrics(model, retrain_loader, select_num)
+        selected_index = DeepGini_metrics(model, retrain_index, data, select_num)
     elif metric == "random":
-        selected_index = random_select(retrain_dataset_length, select_num)
+        selected_index = random_select(len(retrain_index), select_num)
     elif metric == "l_con":
-        selected_index = least_confidence_metrics(model, select_num, retrain_loader)
+        selected_index = least_confidence_metrics(model, retrain_index, data, select_num)
     elif metric == "entropy":
-        selected_index = entropy_metrics(model, retrain_loader, select_num)
+        selected_index = entropy_metrics(model, retrain_index, data, select_num)
     elif metric == "margin":
-        selected_index = margin_metrics(model, retrain_loader, select_num)
+        selected_index = margin_metrics(model, retrain_index, data, select_num)
     elif metric == "kmeans":
-        selected_index = Kmeans_metrics(model, retrain_loader, select_num)
-
+        selected_index = Kmeans_metrics(model, retrain_index, data, select_num)
+    elif metric == "bald":
+        selected_index = BALD_metrics(model, retrain_index, data, select_num)
     return selected_index
 
 

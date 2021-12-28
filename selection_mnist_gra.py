@@ -6,10 +6,10 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
-from models.geometric_models.mnist_nn_conv import train as MNIST_train, test as MNIST_test
+from models.geometric_models.mnist_graclus import train as gra_train, test as gra_test
 from parser import Parser
 from test_metrics.TU_metrics.Kmeans_selection import Kmeans_metrics
-from trainer_mnist import construct_model
+from trainer_mnist_gra import construct_model
 
 from test_metrics.MNIST_metrics.M_Margin import margin_metrics
 from test_metrics.MNIST_metrics.M_random import random_select
@@ -97,10 +97,10 @@ def retrain_and_save(args):
         best_acc = 0
         best_val_acc = test_acc = 0
         for epoch in range(args.retrain_epochs):
-            MNIST_train(epoch, new_train_loader, model, optimizer)
-            train_acc = MNIST_test(new_train_loader, new_train_dataset, model)
-            val_acc = MNIST_test(val_loader, val_dataset, model)
-            tmp_test_acc = MNIST_test(test_loader, test_dataset, model)
+            gra_train(epoch, model, optimizer, new_train_loader)
+            train_acc = gra_test(model, new_train_loader, new_train_dataset)
+            val_acc = gra_test(model, val_loader, val_dataset)
+            tmp_test_acc = gra_test(model, test_loader, test_dataset)
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc

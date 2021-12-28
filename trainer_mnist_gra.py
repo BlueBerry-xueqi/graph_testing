@@ -8,7 +8,7 @@ import torch_geometric.transforms as T
 from torch_geometric.datasets import MNISTSuperpixels
 from torch_geometric.loader import DataLoader
 
-from models.geometric_models.mnist_nn_conv import Net as NN, train as MNIST_train, test as MNIST_test
+from models.geometric_models.mnist_graclus import Net as graclus, train as graclus_train, test as graclus_test
 from parser import Parser
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -18,8 +18,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # construct the original model
 def construct_model(args, dataset):
-    if args.type == "NN":
-        model = NN(dataset.num_features, dataset.num_classes)
+    if args.type == "gra":
+        model = graclus(dataset)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     return model, optimizer
 
@@ -29,7 +29,7 @@ def load_data(args):
     transform = T.Cartesian(cat=False)
     dataset = MNISTSuperpixels(path, True, transform=transform)
     dataset = dataset.shuffle()
-    dataset = dataset[:20000]
+    dataset = dataset[:10000]
     print("load data MNIST successfully!")
 
     n = len(dataset) // 10
@@ -74,10 +74,10 @@ def train_and_save(args):
     best_val_acc = test_acc = 0
 
     for epoch in range(args.epochs):
-        MNIST_train(epoch, train_loader, model, optimizer)
-        train_acc = MNIST_test(train_loader, train_dataset, model)
-        val_acc = MNIST_test(val_loader, val_dataset, model)
-        tmp_test_acc = MNIST_test(test_loader, test_dataset, model)
+        graclus_train(epoch, model, optimizer, train_loader)
+        train_acc = graclus_test(model, train_loader, train_dataset)
+        val_acc = graclus_test(model, val_loader, val_dataset)
+        tmp_test_acc = graclus_test(model, test_loader, test_dataset)
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
