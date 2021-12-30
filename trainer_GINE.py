@@ -26,6 +26,7 @@ def load_data(args):
     # load data from TU dataset
     path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', 'TU')
     dataset = TUDataset(path, name=args.data).shuffle()
+    dataset = dataset[:5000]
 
     # split dataset
     n = len(dataset) // 10
@@ -38,10 +39,10 @@ def load_data(args):
     test_dataset = dataset[test_index]
     retrain_dataset = dataset[retrain_index]
 
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
-    retrain_loader = DataLoader(retrain_dataset, batch_size=128, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    retrain_loader = DataLoader(retrain_dataset, batch_size=64, shuffle=False)
 
     # save index path
     savedpath_dataset = f"pretrained_all/pretrained_model/{args.type}_{args.data}/dataset"
@@ -75,30 +76,31 @@ def train_and_save(args):
         GINE_train(train_loader, model, optimizer)
         train_acc = GINE_test(train_loader, model)
         val_acc = GINE_test(val_loader, model)
-
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_test = GINE_test(test_loader, model)
-
-        if best_test > best_acc:
-            best_acc = best_test
+        # select best test accuracy and save best model
+        if val_acc > best_acc:
+            best_acc = val_acc
             best_model = copy.deepcopy(model.state_dict())
 
         print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-              f'Test: {best_test:.4f}')
-    print("Best acuracy is: ", best_acc)
+              f'Val: {val_acc:.4f}')
+    print("Best val acuracy is: ", best_acc)
 
     # save best model
-    savedpath_pretrain = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath_pretrain):
-        os.makedirs(savedpath_pretrain, exist_ok=True)
-    torch.save(best_model, os.path.join(savedpath_pretrain, "model.pt"))
+    savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
+    if not os.path.isdir(savedpath_model):
+        os.makedirs(savedpath_model, exist_ok=True)
+    torch.save(best_model, os.path.join(savedpath_model, "model.pt"))
+
+    # load best model, and get test accuracy
+    model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
+    test_acc = GINE_test(test_loader, model)
+    print("best test accuracy is: ", test_acc)
 
     # save best accuracy
     savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
 
 
 # One training epoch for GNN model.

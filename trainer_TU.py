@@ -33,10 +33,10 @@ def load_data(args):
     test_dataset = dataset[test_index]
     retrain_dataset = dataset[retrain_index]
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-    retrain_loader = DataLoader(retrain_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=60, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=60, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=60, shuffle=False)
+    retrain_loader = DataLoader(retrain_dataset, batch_size=60, shuffle=False)
 
     # save index path
     savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"

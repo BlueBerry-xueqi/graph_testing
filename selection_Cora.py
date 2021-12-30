@@ -40,7 +40,7 @@ def Cora_loadData(args):
 
 def retrain_and_save(args):
     data, dataset, train_index, val_index, test_index, retrain_index = Cora_loadData(args)
-    test_acc_exp = 0
+    best_exp_acc = 0
 
     for exp_ID in range(args.exp):
         print("exp", exp_ID, "...")
@@ -64,7 +64,7 @@ def retrain_and_save(args):
 
         # for other's use the previous retrained model
         if not ratio == 5:
-            savedpath_previous = f"retrained_all/retrained_model/{args.metrics}/{args.type}_{args.data}/model{ratio_pre}.pt"
+            savedpath_previous = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/model{ratio_pre}.pt"
             # load model from previous model
             if os.path.isfile(savedpath_previous):
                 model.load_state_dict(torch.load(savedpath_previous, map_location=device))
@@ -80,44 +80,42 @@ def retrain_and_save(args):
         new_select_index = retrain_index[select_index]
         new_train_index = torch.cat((new_select_index, train_index), -1)
 
-
         best_acc = 0
-        best_val_acc = test_acc = 0
         for epoch in range(args.retrain_epochs):
             Cora_train(model, optimizer, data, new_train_index)
-            train_acc, val_acc, tmp_test_acc = Cora_test(model, data, new_train_index, val_index, test_index)
+            train_acc = Cora_test(model, data, new_train_index)
+            val_acc = Cora_test(model, data, val_index)
 
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                test_acc = tmp_test_acc
-
-            if test_acc > best_acc:
+            # select best test accuracy and save best model
+            if val_acc > best_acc:
+                best_acc = val_acc
                 best_model = copy.deepcopy(model.state_dict())
-                best_acc = test_acc
 
             print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-                  f'Test: {test_acc:.4f}')
-
-        print("exp ID: ", exp_ID, ", best accuracy is：", best_acc)
-
-        if best_acc > test_acc_exp:
-            print("accuracy increase!")
+                  f'Val: {val_acc:.4f}')
+        print("best val acc is: ", best_acc)
+        # if test acc is better than the best exp acc, copy the best exp model
+        if best_acc > best_exp_acc:
             best_exp_model = copy.deepcopy(best_model)
-            test_acc_exp = best_acc
+            best_exp_acc = best_acc
 
-    print("final best accuracy is：", test_acc_exp)
+    print("choose model with best val: ", best_exp_acc)
+    # load best model and get test acc
+    model.load_state_dict(best_exp_model)
+    test_acc = Cora_test(model, data, test_index)
+    print("best test accuracy is: ", test_acc)
 
     # save best model
-    savedpath_model = f"retrained_all/retrained_model/{args.metrics}/{args.type}_{args.data}/"
+    savedpath_model = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/"
     if not os.path.isdir(savedpath_model):
         os.makedirs(savedpath_model, exist_ok=True)
     torch.save(best_exp_model, os.path.join(savedpath_model, f"model{ratio}.pt"))
 
-    # save best accuracy
-    savedpath_acc = f"retrained_all/train_accuracy/{args.metrics}/{args.type}_{args.data}"
+    # save the best accuracy
+    savedpath_acc = f"retrained_all/train_accuracy/{args.type}_{args.data}/{args.metrics}"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc_exp)
+    np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc)
 
 
 def Cora_select_functions(model, retrain_index, metric, data, select_num):

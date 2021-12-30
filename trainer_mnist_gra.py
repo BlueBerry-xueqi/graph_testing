@@ -29,7 +29,7 @@ def load_data(args):
     transform = T.Cartesian(cat=False)
     dataset = MNISTSuperpixels(path, True, transform=transform)
     dataset = dataset.shuffle()
-    dataset = dataset[:10000]
+    dataset = dataset[:5000]
     print("load data MNIST successfully!")
 
     n = len(dataset) // 10

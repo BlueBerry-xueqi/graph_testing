@@ -72,42 +72,35 @@ def train_and_save(args):
     best_test = 0.0
     for epoch in range(args.epochs):
         # train model
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                               factor=0.5, patience=5,
-                                                               min_lr=0.0000001)
-        lr = scheduler.optimizer.param_groups[0]['lr']
         GIN_train(train_loader, model, optimizer)
         train_acc = GIN_test(train_loader, model)
         val_acc = GIN_test(val_loader, model)
-        scheduler.step(val_acc)
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            best_test = GIN_test(test_loader, model)
-
-        # Break if learning rate is smaller 10**-6.
-        if lr < 0.000001:
-            break
         # select best test accuracy and save best model
-        if best_test > best_acc:
-            best_acc = best_test
+        if val_acc > best_acc:
+            best_acc = val_acc
             best_model = copy.deepcopy(model.state_dict())
 
         print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-              f'Test: {best_test:.4f}')
-    print("Best acuracy is: ", best_acc)
+              f'Val: {val_acc:.4f}')
+    print("Best val acuracy is: ", best_acc)
 
     # save best model
-    savedpath_pretrain = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath_pretrain):
-        os.makedirs(savedpath_pretrain, exist_ok=True)
-    torch.save(best_model, os.path.join(savedpath_pretrain, "model.pt"))
+    savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
+    if not os.path.isdir(savedpath_model):
+        os.makedirs(savedpath_model, exist_ok=True)
+    torch.save(best_model, os.path.join(savedpath_model, "model.pt"))
+
+    # load best model, and get test accuracy
+    model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
+    test_acc = GIN_test(test_loader, model)
+    print("best test accuracy is: ", test_acc)
 
     # save best accuracy
     savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", best_acc)
+    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
 
 
 # One training epoch for GNN model.

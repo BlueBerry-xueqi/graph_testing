@@ -49,7 +49,7 @@ def loadData():
 
 def retrain_and_save(args):
     dataset, train_index, test_index, retrain_index, train_loader, val_loader, test_loader, retrain_loader, train_dataset, val_dataset, test_dataset, retrain_dataset = loadData()
-    test_acc_exp = 0
+    best_exp_acc = 0
 
     # do three exps
     for exp_ID in range(args.exp):
@@ -59,10 +59,10 @@ def retrain_and_save(args):
         model = model.to(device)
 
         ratio = args.select_ratio
-        ratio_pre = ratio - 10
+        ratio_pre = ratio - 5
 
         # the first retrain use the pretrained model
-        if ratio == 10:
+        if ratio == 5:
             savedpath_pre = f"pretrained_all/pretrained_model/{args.type}_{args.data}/model.pt"
             if os.path.isfile(savedpath_pre):
                 model.load_state_dict(torch.load(savedpath_pre, map_location=device))
@@ -72,7 +72,7 @@ def retrain_and_save(args):
                 sys.exit()
 
         # for other's use the previous retrained model
-        if not ratio == 10:
+        if not ratio == 5:
             savedpath_previous = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/model{ratio_pre}.pt"
             # load model from previous model
             if os.path.isfile(savedpath_previous):
@@ -93,32 +93,29 @@ def retrain_and_save(args):
         new_train_dataset = new_train_dataset.shuffle()
         new_train_loader = DataLoader(new_train_dataset, batch_size=64, shuffle=True)
 
-        # initiallize the best accuracy
         best_acc = 0
-        best_val_acc = test_acc = 0
         for epoch in range(args.retrain_epochs):
             gra_train(epoch, model, optimizer, new_train_loader)
             train_acc = gra_test(model, new_train_loader, new_train_dataset)
             val_acc = gra_test(model, val_loader, val_dataset)
-            tmp_test_acc = gra_test(model, test_loader, test_dataset)
-
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                test_acc = tmp_test_acc
-
-            if test_acc > best_acc:
+            # select best test accuracy and save best model
+            if val_acc > best_acc:
+                best_acc = val_acc
                 best_model = copy.deepcopy(model.state_dict())
-                best_acc = test_acc
+
             print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
-                  f'Test: {test_acc:.4f}')
-        print("exp ID: ", exp_ID, ", best accuracy is：", best_acc)
-
-        if best_acc > test_acc_exp:
-            print("accuracy increase!")
+                  f'Val: {val_acc:.4f}')
+        print("best val acc is: ", best_acc)
+        # if test acc is better than the best exp acc, copy the best exp model
+        if best_acc > best_exp_acc:
             best_exp_model = copy.deepcopy(best_model)
-            test_acc_exp = best_acc
+            best_exp_acc = best_acc
 
-    print("final best accuracy is：", test_acc_exp)
+    print("choose model with best val: ", best_exp_acc)
+    # load best model and get test acc
+    model.load_state_dict(best_exp_model)
+    test_acc = gra_test(model, test_loader, test_dataset)
+    print("best test accuracy is: ", test_acc)
 
     # save best model
     savedpath_model = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/"
@@ -130,7 +127,7 @@ def retrain_and_save(args):
     savedpath_acc = f"retrained_all/train_accuracy/{args.type}_{args.data}/{args.metrics}"
     if not os.path.isdir(savedpath_acc):
         os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc_exp)
+    np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc)
 
 
 def select_functions(model, retrain_dataset_length, metric, retrain_loader, select_num):

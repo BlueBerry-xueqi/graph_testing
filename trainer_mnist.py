@@ -29,7 +29,7 @@ def load_data(args):
     transform = T.Cartesian(cat=False)
     dataset = MNISTSuperpixels(path, True, transform=transform)
     dataset = dataset.shuffle()
-    dataset = dataset[:20000]
+    dataset = dataset[:8000]
     print("load data MNIST successfully!")
 
     n = len(dataset) // 10
@@ -71,7 +71,6 @@ def train_and_save(args):
     model = model.to(device)
 
     best_acc = 0
-    best_val_acc = test_acc = 0
 
     for epoch in range(args.epochs):
         MNIST_train(epoch, train_loader, model, optimizer)
