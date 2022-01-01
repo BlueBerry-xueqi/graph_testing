@@ -5,16 +5,16 @@ import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def max_score(model, target_loader, select_num):
+def least_confidence_metrics(model, select_num, retrain_loader):
     scores = []
     with torch.no_grad():
-        for data in target_loader:
+        for data in retrain_loader:
             data = data.to(device)
-            output = model(data.x, data.edge_index, data.batch)
+            output = model(data)[0]
             y_pred = torch.softmax(output, dim=1)
-            score = np.max(torch.Tensor.cpu(y_pred).detach().numpy(), axis=1)
-            scores = np.concatenate((scores, score))
-
+            predic_prob = torch.Tensor.cpu(y_pred).detach().numpy()
+            max_pre = predic_prob.max(1)
+            scores = np.concatenate((scores, max_pre))
     select_index = np.argsort(scores)[::-1][:select_num]
     select_index = select_index.copy()
     return select_index
