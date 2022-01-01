@@ -1,10 +1,10 @@
 import copy
 import os
 import os.path as osp
-
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid
 from models.geometric_models.AGNN import Net as AGNN
 from models.geometric_models.ARMA import Net as ARMA
@@ -43,7 +43,7 @@ def construct_model(args, dataset):
 def Cora_load_Data(args):
     dataset = 'CiteSeer'
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', dataset)
-    dataset = Planetoid(path, dataset).shuffle()
+    dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures()).shuffle()
     data = dataset[0]
     data = data.to(device)
 
@@ -75,11 +75,11 @@ def train_and_save(args):
     model = model.to(device)
 
     best_acc = 0
-
     for epoch in range(args.epochs):
         Cora_train(model, optimizer, data, train_index)
         train_acc = Cora_test(model, data, train_index)
         val_acc = Cora_test(model, data, val_index)
+
         # select best test accuracy and save best model
         if val_acc > best_acc:
             best_acc = val_acc
@@ -87,7 +87,7 @@ def train_and_save(args):
 
         print(f'Epoch: {epoch:03d}, Train: {train_acc:.4f}, '
               f'Val: {val_acc:.4f}')
-    print("Best val accuracy is: ", best_acc)
+    print("Best val acuracy is: ", best_acc)
 
     # save best model
     savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"

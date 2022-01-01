@@ -59,10 +59,10 @@ def retrain_and_save(args):
         model = model.to(device)
 
         ratio = args.select_ratio
-        ratio_pre = ratio - 10
+        ratio_pre = ratio - 5
 
         # the first retrain use the pretrained model
-        if ratio == 10:
+        if ratio == 5:
             savedpath_pre = f"pretrained_all/pretrained_model/{args.type}_{args.data}/model.pt"
             if os.path.isfile(savedpath_pre):
                 model.load_state_dict(torch.load(savedpath_pre, map_location=device))
@@ -72,7 +72,7 @@ def retrain_and_save(args):
                 sys.exit()
 
         # for other's use the previous retrained model
-        if not ratio == 10:
+        if not ratio == 5:
             savedpath_previous = f"retrained_all/retrained_model/{args.type}_{args.data}/{args.metrics}/model{ratio_pre}.pt"
             # load model from previous model
             if os.path.isfile(savedpath_previous):
