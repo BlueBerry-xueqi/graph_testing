@@ -1,12 +1,15 @@
-import torch
-import numpy as np
+import os
+import pdb
 from multiprocessing import Pool
-from tqdm import tqdm
-from scipy.stats import gaussian_kde
-from scipy import linalg
-from numpy import (atleast_2d, pi, cov)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+import numpy as np
+import torch
+from numpy import (atleast_2d, pi, cov)
+from scipy import linalg
+from scipy.stats import gaussian_kde
+from tqdm import tqdm
+
+from test_metrics.ModelWrapper import ModelWrapper as Model_func
 
 
 class refined_gaussian_kde(gaussian_kde):
@@ -40,6 +43,31 @@ class refined_gaussian_kde(gaussian_kde):
 
 def _aggr_output(x):
     return [np.mean(x[..., j]) for j in range(x.shape[-1])]
+
+
+def _get_saved_path(base_path, dataset, dtype, layer_names):
+    """Determine saved path of ats and pred
+
+    Args:
+        base_path (str): Base save path.
+        dataset (str): Name of dataset.
+        dtype (str): Name of dataset type (e.g., train, test, fgsm, ...).
+        layer_names (list): List of layer names.
+
+    Returns:
+        ats_path: File path of ats.
+        pred_path: File path of pred (independent of layers)
+    """
+
+    joined_layer_names = "_".join(layer_names)
+    return (
+        os.path.join(
+            base_path,
+            dataset + "_" + dtype + "_" + joined_layer_names + "_ats" + ".npy",
+        ),
+        os.path.join(base_path, dataset + "_" + dtype + "_pred" + ".npy"),
+        os.path.join(base_path, dataset + "_" + dtype + "_groundtruth" + ".npy")
+    )
 
 
 def get_ats(
@@ -81,11 +109,10 @@ def get_ats(
     if is_classification:
         p = Pool(num_proc)
         print(prefix + "Model serving")
-        with torch.no_grad():
-            for data in dataset:
-                data = data.to(device)
-                output = model(data.x, data.edge_index, data.batch)
-                y_pred = torch.softmax(output, dim=1)
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = Model_func(model, device)
+        model.register_layers(layer_names)
         pred, ground_truth, layer_outputs = model.extract_intermediate_outputs(dataset)
         # if len(layer_names) == 1:
         #     layer_outputs = [
@@ -114,7 +141,12 @@ def get_ats(
                 ats = np.append(ats, layer_matrix, axis=1)
                 layer_matrix = None
 
-    return ats, pred
+    if save_path is not None:
+        np.save(save_path[0], ats)
+        np.save(save_path[1], pred)
+        np.save(save_path[2], ground_truth)
+
+    return ats, pred, ground_truth
 
 
 def find_closest_at(at, train_ats):
@@ -133,7 +165,7 @@ def find_closest_at(at, train_ats):
     return (min(dist), train_ats[np.argmin(dist)])
 
 
-def _get_train_target_ats(model, x_train, x_target, target_name, layer_names):
+def _get_train_target_ats(model, x_train, x_target, target_name, layer_names, dic):
     """Extract ats of train and target inputs. If there are saved files, then skip it.
 
     Args:
@@ -156,23 +188,23 @@ def _get_train_target_ats(model, x_train, x_target, target_name, layer_names):
         x_train,
         "train",
         layer_names,
-        num_classes=10,
-        is_classification=True,
+        num_classes=dic["num_classes"],
+        is_classification=dic["is_classification"]
     )
 
-    target_ats, target_pred = get_ats(
+    target_ats, target_pred, ground_truth_target = get_ats(
         model,
         x_target,
         target_name,
         layer_names,
-        num_classes=10,
-        is_classification=True,
+        num_classes=dic["num_classes"],
+        is_classification=dic["is_classification"]
     )
 
-    return train_ats, train_pred, target_ats, target_pred
+    return train_ats, train_pred, target_ats, target_pred, ground_truth_target
 
 
-def fetch_dsa(model, x_train, x_target, target_name, layer_names, select_num):
+def fetch_dsa(model, x_train, x_target, target_name, layer_names, dic):
     """Distance-based SA
 
     Args:
@@ -182,15 +214,16 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, select_num):
         target_name (str): Name of target set.
         layer_names (list): List of selected layer names.
         args: keyboard args.
-        select_num: size of selected datasets
 
     Returns:
         dsa (list): List of dsa for each target input.
     """
 
+    assert dic["is_classification"] == True
+
     prefix = info("[" + target_name + "] ")
     train_ats, train_pred, target_ats, target_pred, ground_truth_target = _get_train_target_ats(
-        model, x_train, x_target, target_name, layer_names
+        model, x_train, x_target, target_name, layer_names, dic
     )
 
     class_matrix = {}
@@ -212,12 +245,10 @@ def fetch_dsa(model, x_train, x_target, target_name, layer_names, select_num):
         )
         dsa.append(a_dist / b_dist)
 
-    scores_sort = np.argsort(dsa)
-    select_index = scores_sort[-select_num:]
-    return select_index
+    return dsa, target_pred, ground_truth_target
 
 
-def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
+def _get_kdes(train_ats, train_pred, class_matrix, dic):
     """Kernel density estimation
 
     Args:
@@ -232,24 +263,24 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
     """
 
     removed_cols = []
-    if kwargs["is_classification"]:
-        for label in range(kwargs["num_classes"]):
+    if dic["is_classification"]:
+        for label in range(dic["num_classes"]):
             col_vectors = np.transpose(train_ats[class_matrix[label]])
             for i in range(col_vectors.shape[0]):
                 if (
-                        np.var(col_vectors[i]) < kwargs["var_threshold"]
+                        np.var(col_vectors[i]) < dic["var_threshold"]
                         and i not in removed_cols
                 ):
                     removed_cols.append(i)
 
         kdes = {}
-        for label in tqdm(range(kwargs["num_classes"]), desc="kde"):
+        for label in tqdm(range(dic["num_classes"]), desc="kde"):
             refined_ats = np.transpose(train_ats[class_matrix[label]])
             refined_ats = np.delete(refined_ats, removed_cols, axis=0)
 
             if refined_ats.shape[0] == 0:
                 print(
-                    warn("ats were removed by threshold {}".format(kwargs["var_threshold"]))
+                    warn("ats were removed by threshold {}".format(dic["var_threshold"]))
                 )
                 break
             kdes[label] = refined_gaussian_kde(refined_ats)
@@ -257,13 +288,13 @@ def _get_kdes(train_ats, train_pred, class_matrix, **kwargs):
     else:
         col_vectors = np.transpose(train_ats)
         for i in range(col_vectors.shape[0]):
-            if np.var(col_vectors[i]) < kwargs["var_threshold"]:
+            if np.var(col_vectors[i]) < dic["var_threshold"]:
                 removed_cols.append(i)
 
         refined_ats = np.transpose(train_ats)
         refined_ats = np.delete(refined_ats, removed_cols, axis=0)
         if refined_ats.shape[0] == 0:
-            print(warn("ats were removed by threshold {}".format(kwargs["var_threshold"])))
+            print(warn("ats were removed by threshold {}".format(dic["var_threshold"])))
         kdes = [refined_gaussian_kde(refined_ats)]
 
     print(infog("The number of removed columns: {}".format(len(removed_cols))))
@@ -276,7 +307,7 @@ def _get_lsa(kde, at, removed_cols):
     return np.asscalar(-kde.logpdf(np.transpose(refined_at)))
 
 
-def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
+def fetch_lsa(model, x_train, x_target, target_name, layer_names, dic):
     """Likelihood-based SA
 
     Args:
@@ -292,22 +323,22 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
     """
 
     prefix = info("[" + target_name + "] ")
-    train_ats, train_pred, target_ats, target_pred = _get_train_target_ats(
-        model, x_train, x_target, target_name, layer_names, **kwargs
+    train_ats, train_pred, target_ats, target_pred, ground_truth_target = _get_train_target_ats(
+        model, x_train, x_target, target_name, layer_names, dic
     )
 
     class_matrix = {}
-    if kwargs["is_classification"]:
+    if dic["is_classification"]:
         for i, label in enumerate(train_pred):
             if label not in class_matrix:
                 class_matrix[label] = []
             class_matrix[label].append(i)
 
-    kdes, removed_cols = _get_kdes(train_ats, train_pred, class_matrix, **kwargs)
+    kdes, removed_cols = _get_kdes(train_ats, train_pred, class_matrix, dic)
 
     lsa = []
     print(prefix + "Fetching LSA")
-    if kwargs["is_classification"]:
+    if dic["is_classification"]:
         for i, at in enumerate(tqdm(target_ats)):
             label = target_pred[i]
             kde = kdes[label]
@@ -317,7 +348,7 @@ def fetch_lsa(model, x_train, x_target, target_name, layer_names, **kwargs):
         for at in tqdm(target_ats):
             lsa.append(_get_lsa(kde, at, removed_cols))
 
-    return lsa, target_pred
+    return lsa, target_pred, ground_truth_target
 
 
 def get_sc(lower, upper, k, sa):
@@ -335,10 +366,6 @@ def get_sc(lower, upper, k, sa):
 
     buckets = np.digitize(sa, np.linspace(lower, upper, k))
     return len(list(set(buckets))) / float(k) * 100
-
-
-from sklearn.linear_model import LogisticRegressionCV
-from sklearn.metrics import roc_curve, auc
 
 
 class Colors:
