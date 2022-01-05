@@ -6,6 +6,44 @@ import keras.backend as K
 from collections import defaultdict
 
 
+def select_from_large(select_amount, target_lsa):
+    selected_lst, lsa_lst = order_output(target_lsa, select_amount)
+    # print(lsa_lst)
+    print(selected_lst)
+    selected_index = []
+    for i in range(select_amount):
+        selected_index.append(selected_lst[i])
+    return selected_index
+
+
+def order_output(target_lsa, select_amount):
+    lsa_lst = []
+
+    tmp_lsa_lst = target_lsa[:]
+    selected_lst = []
+    while len(selected_lst) < select_amount:
+        max_lsa = max(tmp_lsa_lst)
+        selected_lst.append(find_index(target_lsa, selected_lst, max_lsa))
+        lsa_lst.append(max_lsa)
+        tmp_lsa_lst.remove(max_lsa)
+    return selected_lst, lsa_lst
+
+
+def find_index(target_lsa,selected_lst,max_lsa):
+    for i in range(len(target_lsa)):
+        if max_lsa==target_lsa[i] and i not in selected_lst:
+            return i
+    return 0
+
+
+def select_from_index(select_amount, indexlst):
+    selected_index = []
+    #print(indexlst)
+    for i in range(select_amount):
+        selected_index.append(indexlst[i])
+    return selected_index
+
+
 def build_neuron_tables(model, x_test, divide,output):
     total_num = x_test.shape[0]
     # init dict and its input
@@ -145,7 +183,7 @@ def selectsample(model, x_test, delta, iterate,neuron_interval,neuron_proba,test
     return max_index0
 
 
-def conditional_sample(model, x_test, sample_size,attack=0):
+def conditional_sample(model,x_test,sample_size,attack=0):
     delta = 5
     iterate = int((sample_size - 30)/delta)
     test_output = build_testoutput(model, x_test)
@@ -154,3 +192,9 @@ def conditional_sample(model, x_test, sample_size,attack=0):
     index_list = selectsample(model, x_test, delta, iterate,neuron_interval,neuron_proba,test_output,attack)
     #print(index_list)
     return list(index_list)
+
+
+def CES_selection(model, candidate_data,select_size ):
+    CES_index = conditional_sample(model, candidate_data, select_size)
+    select_index = select_from_index(select_size, CES_index)
+    return select_index

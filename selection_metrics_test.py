@@ -8,8 +8,16 @@ from torch_geometric.loader import DataLoader
 
 from models.geometric_models.GraphNN import train as GraphNN_train, test as GraphNN_test
 from parser import Parser
+from test_metrics.Agg import AgglomerativeClustering_metrics
+from test_metrics.GMM import GMM_metrics
+from test_metrics.Hierarchical import Hierarchical_metrics
+from test_metrics.Spectral import SpectralClustering_metrics
+from test_metrics.random import random_select
+from test_metrics.variance import computeVariancescore
 from trainer_TU import construct_model
 from test_metrics.MCP import mcp_score
+from test_metrics.sa import fetch_lsa
+from test_metrics.TU_metrics.Kmeans_selection import KMeans_score
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -79,7 +87,8 @@ def retrain_and_save(args):
         select_num = int(ratio / 100 * len_retrain_set)
 
         # get select index using metrics
-        select_index = select_functions(model, len_retrain_set, args.metrics, retrain_loader, select_num, dataset)
+        select_index = select_functions(model, len_retrain_set, args.metrics, retrain_loader, select_num, dataset,
+                                        train_dataset)
         new_select_index = retrain_index[select_index]
         new_train_index = np.concatenate((new_select_index, train_index))
         new_train_dataset = dataset[new_train_index]
@@ -123,9 +132,30 @@ def retrain_and_save(args):
     np.save(f"{savedpath_acc}/test_accuracy_ratio{ratio}.npy", test_acc)
 
 
-def select_functions(model, len_retrain_set, metric, retrain_loader, select_num, dataset):
+def select_functions(model, len_retrain_set, metric, retrain_loader, select_num, dataset, train_dataset):
     if metric == "MCP":
         selected_index = mcp_score(model, retrain_loader, select_num, dataset.num_classes, 60)
+    if metric == "variance":
+        selected_index = computeVariancescore(model, retrain_loader, select_num)
+    if metric == "kmeans":
+        selected_index = KMeans_score(model, retrain_loader, select_num)
+    elif metric == "random":
+        selected_index = random_select(len_retrain_set, select_num)
+
+    if metric == "Pace":
+        selected_index = mcp_score(model, retrain_loader, select_num, dataset.num_classes, 60)
+
+    # if metric == "CES":
+    #     selected_index = CES_selection(model, retrain_loader, select_num)
+    if metric == "CSS":
+        selected_index = mcp_score(model, retrain_loader, select_num, dataset.num_classes, 60)
+
+    if metric == "spec":
+        selected_index = SpectralClustering_metrics(model, retrain_loader, select_num)
+    if metric == "Hierarchical":
+        selected_index = AgglomerativeClustering_metrics(model, retrain_loader, select_num)
+    if metric == "GMM":
+        selected_index = GMM_metrics(model, retrain_loader, select_num)
 
     return selected_index
 
