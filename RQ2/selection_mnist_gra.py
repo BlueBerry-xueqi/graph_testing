@@ -53,44 +53,46 @@ def loadData():
 
 def retrain_and_save(args):
     dataset, train_index, test_index, train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = loadData()
-    mse_list = []
+    finial_mse_list = []
+    for exp in range(3):
+        mse_list = []
+        for exp_ID in range(args.mse_epochs):
+            model, optimizer = construct_model(args, dataset)
+            model = model.to(device)
 
-    # do three exps
-    for exp_ID in range(100):
-        model, optimizer = construct_model(args, dataset)
-        model = model.to(device)
+            savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
+            model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
 
-        savedpath_model = f"pretrained_all/pretrained_model/{args.type}_{args.data}/"
-        model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
+            select_num = args.select_num
+            len_test = len(test_index)
 
-        ratio = args.select_ratio
-        len_test = len(test_index)
-        select_num = int(ratio / 100 * len_test)
+            # get select index using metrics
+            select_index = select_functions(model, len_test, args.metrics, test_loader, select_num, dataset)
+            sample_index = test_index[select_index]
+            sample_dataset = dataset[sample_index]
+            sample_loader = DataLoader(sample_dataset, batch_size=64, shuffle=True)
+            sample_test_acc = MNIST_test(sample_loader, sample_dataset, model)
 
-        # get select index using metrics
-        select_index = select_functions(model, len_test, args.metrics, test_loader, select_num, dataset)
-        sample_index = test_index[select_index]
-        sample_dataset = dataset[sample_index]
-        sample_loader = DataLoader(sample_dataset, batch_size=64, shuffle=True)
-        sample_test_acc = MNIST_test(sample_loader, sample_dataset, model)
+            savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/test_accuracy.npy"
+            test_acc = np.load(savedpath_acc)
+            diff = test_acc - sample_test_acc
+            mse_power = np.power(diff, 2)
+            mse_list.append(mse_power)
 
-        savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/test_accuracy.npy"
-        test_acc = np.load(savedpath_acc)
-        diff = test_acc - sample_test_acc
-        mse_power = np.power(diff, 2)
-        mse_list.append(mse_power)
+            print(f'Exp: {exp_ID:03d},  Test acc: {test_acc:.4f}, sample acc: {sample_test_acc:.4f}, '
+                  f'difference: {diff:.4f}')
 
-        print(f'Exp: {exp_ID:03d},  Test acc: {test_acc:.4f}, sample acc: {sample_test_acc:.4f}, '
-              f'difference: {diff:.4f}')
+        mes_avg = math.sqrt(np.sum(mse_list) / args.mse_epochs)
+        print("mse is: ", mes_avg)
+        finial_mse_list.append(mes_avg)
 
-    mes_avg = math.sqrt(np.sum(mse_list) / 100)
-    print("mse is: ", mes_avg)
-
+    mse_final = np.min(finial_mse_list)
+    print("mse_final is: ", mse_final)
     # save best accuracy
     savedpath_avg = f"MSE/{args.type}_{args.data}/{args.metrics}/"
     if not os.path.isdir(savedpath_avg):
         os.makedirs(savedpath_avg, exist_ok=True)
-    np.save(f"{savedpath_avg}/mse{ratio}.npy", mes_avg)
+    np.save(f"{savedpath_avg}/mse{select_num}.npy", mse_final)
 
 
 def select_functions(model, retrain_dataset_length, metric, retrain_loader, select_num, dataset):

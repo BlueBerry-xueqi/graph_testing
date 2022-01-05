@@ -1,38 +1,28 @@
 import copy
+from torch_geometric.datasets import TUDataset, Planetoid
 import os
-import os.path as osp
-import pdb
-
-import numpy as np
 import torch
-import torch_geometric.transforms as T
-from torch_geometric.datasets import MNISTSuperpixels
-from torch_geometric.loader import DataLoader
-
-from models.geometric_models.mnist_nn_conv import Net as NN, train as MNIST_train, test as MNIST_test
+import numpy as np
 from parser import Parser
+import os.path as osp
+from models.geometric_models.GraphNN import Net as GraphNN, train as GrapNN_train, test as GraphNN_test
+from torch_geometric.loader import DataLoader
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# model: NN, dataset: MNIST
-
 # construct the original model
 def construct_model(args, dataset):
-    if args.type == "NN":
-        model = NN(dataset.num_features, dataset.num_classes)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    if args.type == "GraphNN":
+        model = GraphNN(dataset)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     return model, optimizer
 
 
 def load_data(args):
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'MNIST')
-    transform = T.Cartesian(cat=False)
-    dataset = MNISTSuperpixels(path, True, transform=transform)
-    dataset = dataset.shuffle()
-    dataset = dataset[:20000]
-    print("load data MNIST successfully!")
-
+    # load data from TU dataset
+    path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', 'TU')
+    dataset = TUDataset(path, name=args.data).shuffle()
     n = len(dataset) // 10
     index = torch.randperm(len(dataset))
     train_index, val_index, test_index = index[:6 * n], index[6 * n:8 * n], index[8 * n:]
@@ -41,9 +31,9 @@ def load_data(args):
     val_dataset = dataset[val_index]
     test_dataset = dataset[test_index]
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=60, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=60, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=60, shuffle=False)
 
     # save index path
     savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"
@@ -56,23 +46,26 @@ def load_data(args):
     torch.save(val_index, f"{savedpath_index}/val_index.pt")
     torch.save(test_index, f"{savedpath_index}/test_index.pt")
 
-    return dataset, train_index, test_index, train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset
+    return dataset, train_loader, val_loader, test_loader, train_dataset,val_dataset, test_dataset
 
 
 def train_and_save(args):
-    dataset, train_index, test_index, train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = load_data(
+    # load data
+    dataset, train_loader, val_loader, test_loader, train_dataset,val_dataset, test_dataset = load_data(
         args)
-
     # construct model
     model, optimizer = construct_model(args, dataset)
     model = model.to(device)
 
+    # train model in many epochs
     best_acc = 0
-
     for epoch in range(args.epochs):
-        MNIST_train(epoch, train_loader, model, optimizer)
-        train_acc = MNIST_test(train_loader, train_dataset, model)
-        val_acc = MNIST_test(val_loader, val_dataset, model)
+        # train model
+        GrapNN_train(model, optimizer, train_loader, train_dataset)
+        # get test accuracy of model
+        train_acc = GraphNN_test(train_loader, model)
+        val_acc = GraphNN_test(val_loader, model)
+
         # select best test accuracy and save best model
         if val_acc > best_acc:
             best_acc = val_acc
@@ -90,7 +83,7 @@ def train_and_save(args):
 
     # load best model, and get test accuracy
     model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
-    test_acc = MNIST_test(test_loader, test_dataset, model)
+    test_acc = GraphNN_test(test_loader, model)
     print("best test accuracy is: ", test_acc)
 
     # save best accuracy

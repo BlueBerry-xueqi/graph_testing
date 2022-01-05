@@ -48,11 +48,10 @@ def Cora_load_Data(args):
     dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures()).shuffle()
     data = dataset[0]
     data = data.to(device)
-    pdb.set_trace()
 
     n = int(len(data.y) / 10)
     index = torch.randperm(len(data.y))
-    train_index, val_index, test_index = index[:3 * n], index[3 * n:4 * n], index[4 * n:5*n]
+    train_index, val_index, test_index = index[:6 * n], index[6 * n:8 * n], index[8 * n:]
 
     # save index path
     savedpath_index = f"pretrained_all/pretrained_model/{args.type}_{args.data}/index"
