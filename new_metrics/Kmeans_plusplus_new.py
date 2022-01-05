@@ -15,8 +15,7 @@ def KMeans_plusplus_score(model, retrain_index, data, select_num):
         y_pred = torch.softmax(output, dim=1)
         predict_list = torch.Tensor.cpu(y_pred).detach().numpy()
 
-    kmeans_pp = kmeans_plusplus(X=predict_list, n_clusters=select_num, random_state=0)
-    centers = kmeans_pp.cluster_centers_
+    centers, _ = kmeans_plusplus(X=predict_list, n_clusters=select_num, random_state=0)
     selected_index = predict(predict_list, centers)
     return selected_index
 
