@@ -51,3 +51,4 @@ def SpectralClustering_metrics(model, retrain_loader, select_num):
     n = int(select_num / 10)
     select_index = predict(x, label_list, n)
     return select_index
+
