@@ -17,11 +17,11 @@ for i in range(1, 20):
 datasets = ["Cora"]
 #  CiteSeer
 # Tox21_AhR_training, NCI109 Mutagenicity
-models = ["AGNN"]
+models = ["GCN"]
 # GraphNN
 
-metrics = ["random", "entropy", "margin", "deepgini", "l_con", "GMM", "Hierarchical", "kmeans", "MCP", "spec",
-           "variance"]
+metrics = ["random", "entropy", "margin", "deepgini", "l_con", "variance", "MCP", "GMM", "kmeans", "spec",
+           "Hierarchical"]
 
 
 def plotGraph():
@@ -88,21 +88,31 @@ def plotGraph():
                         if metric == "variance":
                             accs_variance.append(acc_retrain)
 
-            plt.plot(ratios, accs_DeepGini, marker='o')
-            plt.plot(ratios, accs_max, marker='o')
-            plt.plot(ratios, accs_margin, marker='o')
-            plt.plot(ratios, accs_entropy, marker='o')
+            #
+            plt.figure(dpi=180)
+            plt.style.use('seaborn-whitegrid')
+            # plt.rcParams['axes.facecolor'] = 'tab:gray'
 
-            plt.plot(ratios, accs_GMM, marker='o')
-            plt.plot(ratios, accs_Hierarchical, marker='o')
-            plt.plot(ratios, accs_kmeans, marker='o')
-            plt.plot(ratios, accs_MCP, marker='o')
-            plt.plot(ratios, accs_spec, marker='o')
-            plt.plot(ratios, accs_variance, marker='o')
-            plt.plot(ratios, accs_random, marker='o', color='red')
-            plt.legend(["DeepGini", "least confidence", "margin", "entropy", "GMM", "Hierarchical", "K-Means", "MCP",
-                        "Spectrum", "variance", "random"])
+            # plot lines
+            plt.plot(ratios, accs_DeepGini, marker="o", markersize=3)
+            plt.plot(ratios, accs_max, marker="o", markersize=3)
+            plt.plot(ratios, accs_margin, marker="o", markersize=3, color='black')
+            plt.plot(ratios, accs_entropy, marker="o", markersize=3)
+            plt.plot(ratios, accs_MCP, marker="o", markersize=3)
+            plt.plot(ratios, accs_variance, marker="o", markersize=3)
 
+            plt.plot(ratios, accs_GMM, marker="o", markersize=3)
+            plt.plot(ratios, accs_Hierarchical, marker="o", markersize=3)
+            plt.plot(ratios, accs_kmeans, marker="o", markersize=3)
+            plt.plot(ratios, accs_spec, marker="o", markersize=3, color='blue')
+            plt.plot(ratios, accs_random, marker="o", color='red', markersize=3)
+            plt.legend(["DeepGini", "least confidence", "margin", "entropy", "MCP", "variance", "GMM", "Hierarchical",
+                        "K-Means", "Spectrum", "random"], frameon = True)
+
+
+            # set x and y axis name
+            plt.xlabel('Percentage of retrained data selected')
+            plt.ylabel('Test accuracy')
             plt.title(f"{model}_{dataset}")
             plt.show()
 
