@@ -14,10 +14,10 @@ root_retrain = "retrained_all/train_accuracy"
 ratios = [0]
 for i in range(1, 20):
     ratios.append(i * 5)
-datasets = ["CiteSeer"]
+datasets = ["Cora"]
 #  CiteSeer
 # Tox21_AhR_training, NCI109 Mutagenicity
-models = ["ARMA"]
+models = ["AGNN"]
 # GraphNN
 
 metrics = ["random", "entropy", "margin", "deepgini", "l_con", "GMM", "Hierarchical", "kmeans", "MCP", "spec",
@@ -102,12 +102,6 @@ def plotGraph():
             plt.plot(ratios, accs_random, marker='o', color='red')
             plt.legend(["DeepGini", "least confidence", "margin", "entropy", "GMM", "Hierarchical", "K-Means", "MCP",
                         "Spectrum", "variance", "random"])
-
-            # # # # # # test
-            # plt.plot(ratios, accs_max, marker='o')
-            # plt.plot(ratios, accs_DeepGini, marker='*')
-            # plt.plot(ratios, accs_entropy, marker='*')
-            # plt.legend(["random", "deepgini", "entropy", "baseline"])
 
             plt.title(f"{model}_{dataset}")
             plt.show()
