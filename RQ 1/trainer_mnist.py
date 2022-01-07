@@ -30,7 +30,7 @@ def load_data(args):
     transform = T.Cartesian(cat=False)
     dataset = MNISTSuperpixels(path, True, transform=transform)
     dataset = dataset.shuffle()
-    dataset = dataset[:20000]
+    dataset = dataset[:5000]
     print("load data MNIST successfully!")
 
     n = len(dataset) // 10
@@ -90,14 +90,29 @@ def train_and_save(args):
 
     # load best model, and get test accuracy
     model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
-    test_acc = MNIST_test(test_loader, test_dataset, model)
-    print("best test accuracy is: ", test_acc)
+    mis_num = get_mis_num(test_loader, test_dataset, model)
+    accuray = MNIST_test(test_loader, test_dataset, model)
+    print("mis num: ", mis_num)
+    print("accuray: ", accuray)
+    print(len(test_index))
 
     # save best accuracy
-    savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath_acc):
-        os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
+    savedpath_num_misclassed = f"pretrained_all/misclassed_num/{args.type}_{args.data}/"
+    if not os.path.isdir(savedpath_num_misclassed):
+        os.makedirs(savedpath_num_misclassed, exist_ok=True)
+    np.save(f"{savedpath_num_misclassed}/num.npy", mis_num)
+
+
+def get_mis_num(test_loader, test_dataset, model):
+    model.eval()
+    correct = 0
+
+    for data in test_loader:
+        data = data.to(device)
+        pred = model(data).max(1)[1]
+        correct += pred.eq(data.y).sum().item()
+    mis_num = len(test_dataset) - correct
+    return mis_num
 
 
 if __name__ == "__main__":

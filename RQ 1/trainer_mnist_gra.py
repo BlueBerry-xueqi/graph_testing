@@ -100,6 +100,7 @@ def train_and_save(args):
     np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
 
 
+
 if __name__ == "__main__":
     args = Parser().parse()
     train_and_save(args)

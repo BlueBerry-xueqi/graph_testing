@@ -13,7 +13,7 @@ from test_metrics.Cora_metrics.MCP import mcp_score
 from test_metrics.Cora_metrics.least_p import least_possibility_metric
 from test_metrics.Cora_metrics.max_c import max_confidence_metric
 from test_metrics.Cora_metrics.variance import computeVariancescore
-from trainer_Cora import construct_model, Cora_test
+from trainer_Cite import construct_model, Cora_test, get_num_misclassed
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -56,11 +56,13 @@ def retrain_and_save(args):
         new_select_index = test_index[select_index]
 
         # get test accuracy of the small sample and the total test dataset
-        sample_test_acc = Cora_test(model, data, new_select_index)
-        error_rate = 1 - sample_test_acc
-        err_list.append(error_rate)
+        sample_num_misclassed = get_num_misclassed(model, data, new_select_index)
+        savedpath_num_test = f"pretrained_all/misclassed_num/{args.type}_{args.data}/num.npy"
+        test_num_misclass = np.load(savedpath_num_test)
+        detect_rate = sample_num_misclassed / test_num_misclass
+        err_list.append(detect_rate)
 
-        print(f'Exp: {exp_ID:03d},  Test acc: {sample_test_acc:.4f}, error rate: {error_rate:.4f}')
+        print(f'Exp: {exp_ID:03d},  Test mis is: {test_num_misclass:d}, sample mis is: {sample_num_misclassed:d}, detected ratio: {detect_rate:.4f}')
     err_avg = np.sum(err_list) / 20
     print("error rate is: ", err_avg)
 

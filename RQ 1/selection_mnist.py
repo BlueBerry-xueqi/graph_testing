@@ -15,7 +15,7 @@ from test_metrics.MNIST_metrics.M_random import random_select
 from test_metrics.MNIST_metrics.least_p import least_possibility_metric
 from test_metrics.MNIST_metrics.max_c import max_confidence_metric
 from test_metrics.MNIST_metrics.variance import computeVariancescore
-from trainer_mnist import construct_model
+from trainer_mnist import construct_model, get_mis_num
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -64,11 +64,16 @@ def retrain_and_save(args):
         # get sample dataset
         sample_dataset = dataset[new_select_index]
         sample_loader = DataLoader(sample_dataset, batch_size=64, shuffle=True)
-        sample_test_acc = MNIST_test(sample_loader, sample_dataset, model)
-        error_rate = 1 - sample_test_acc
-        err_list.append(error_rate)
 
-        print(f'Exp: {exp_ID:03d},  Test acc: {sample_test_acc:.4f}, error rate: {error_rate:.4f}')
+        sample_num_misclassed = get_mis_num(sample_loader, sample_dataset, model)
+        savedpath_num_test = f"pretrained_all/misclassed_num/{args.type}_{args.data}/num.npy"
+        test_num_misclass = np.load(savedpath_num_test)
+
+        detect_rate = sample_num_misclassed / test_num_misclass
+        err_list.append(detect_rate)
+
+        print(
+            f'Exp: {exp_ID:03d},  Test mis is: {test_num_misclass:d}, sample mis is: {sample_num_misclassed:d}, detected ratio: {detect_rate:.4f}')
     err_avg = np.sum(err_list) / 20
     print("error rate is: ", err_avg)
 

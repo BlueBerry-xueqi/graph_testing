@@ -96,14 +96,14 @@ def train_and_save(args):
 
     # load best model, and get test accuracy
     model.load_state_dict(torch.load(os.path.join(savedpath_model, "model.pt"), map_location=device))
-    test_acc = Cora_test(model, data, test_index)
-    print("best test accuracy is: ", test_acc)
+    num_misclassed = get_num_misclassed(model, data, test_index)
+    print("misclassed test data number is: ", num_misclassed)
 
     # save best accuracy
-    savedpath_acc = f"pretrained_all/train_accuracy/{args.type}_{args.data}/"
-    if not os.path.isdir(savedpath_acc):
-        os.makedirs(savedpath_acc, exist_ok=True)
-    np.save(f"{savedpath_acc}/test_accuracy.npy", test_acc)
+    savedpath_num_misclassed = f"pretrained_all/misclassed_num/{args.type}_{args.data}/"
+    if not os.path.isdir(savedpath_num_misclassed):
+        os.makedirs(savedpath_num_misclassed, exist_ok=True)
+    np.save(f"{savedpath_num_misclassed}/num.npy", num_misclassed)
 
 
 def Cora_train(model, optimizer, data, train_index):
@@ -120,6 +120,14 @@ def Cora_test(model, data, index):
     pred = logits[index].max(1)[1]
     acc = pred.eq(data.y[index]).sum().item() / len(index)
     return acc
+
+
+def get_num_misclassed(model, data, index):
+    model.eval()
+    logits = model(data)
+    pred = logits[index].max(1)[1]
+    num_mis = len(index) - pred.eq(data.y[index]).sum().item()
+    return num_mis
 
 
 if __name__ == "__main__":
