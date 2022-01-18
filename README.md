@@ -23,15 +23,8 @@
 - The Bitcoin-OTC dataset from the `"EvolveGCN: Evolving Graph Convolutional Networks for Dynamic Graphs" <https://arxiv.org/abs/1902.10191>`_ paper, consisting of 138 who-trusts-whom networks of sequential time steps.
 - JODIEDataset, reddit', 'wikipedia', 'mooc', 'lastfm', http://snap.stanford.edu/jodie/#datasets
 
-## Cosider Tasking
+## Tasks
 - Graph Classification
 - Node Classification
 - Link Prediction
 
-## To implement Test Metrics
-
-- LSA/DSA
-- NC
-- DeepGini
-- MCP
-- CES
