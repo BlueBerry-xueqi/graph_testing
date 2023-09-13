@@ -12,8 +12,6 @@ from test_metrics.MNIST_metrics.M_Entropy import entropy_metrics
 from test_metrics.MNIST_metrics.M_Margin import margin_metrics
 from test_metrics.MNIST_metrics.M_least_confidence import least_confidence_metrics
 from test_metrics.MNIST_metrics.M_random import random_select
-from test_metrics.MNIST_metrics.least_p import least_possibility_metric
-from test_metrics.MNIST_metrics.max_c import max_confidence_metric
 from test_metrics.MNIST_metrics.variance import computeVariancescore
 from trainer_mnist import construct_model, get_mis_num
 
@@ -100,12 +98,6 @@ def select_functions(model, retrain_dataset_length, metric, test_loader, select_
         selected_index = computeVariancescore(model, test_loader, select_num)
     elif metric == "mcp":
         selected_index = mcp_score(model, test_loader, select_num, dataset.num_classes, 64)
-    elif metric == "l_p":
-        selected_index = least_possibility_metric(model, test_loader, select_num)
-    elif metric == "m_c":
-        selected_index = max_confidence_metric(model, test_loader, select_num)
-
-
     return selected_index
 
 

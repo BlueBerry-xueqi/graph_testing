@@ -10,8 +10,6 @@ from test_metrics.Cora_metrics.Cora_Margin import margin_metrics
 from test_metrics.Cora_metrics.Cora_least_confidence import least_confidence_metrics
 from test_metrics.Cora_metrics.Cora_random import random_select
 from test_metrics.Cora_metrics.MCP import mcp_score
-from test_metrics.Cora_metrics.least_p import least_possibility_metric
-from test_metrics.Cora_metrics.max_c import max_confidence_metric
 from test_metrics.Cora_metrics.variance import computeVariancescore
 from trainer_Cite import construct_model, Cora_test, get_num_misclassed
 
@@ -88,10 +86,6 @@ def Cora_select_functions(model, test_index, metric, data, select_num, dataset):
         selected_index = computeVariancescore(model, test_index, data, select_num)
     elif metric == "mcp":
         selected_index = mcp_score(model, test_index, data, select_num, dataset.num_classes)
-    elif metric == "l_p":
-        selected_index = least_possibility_metric(model, test_index, data, select_num)
-    elif metric == "m_c":
-        selected_index = max_confidence_metric(model, test_index, data, select_num)
 
     return selected_index
 
