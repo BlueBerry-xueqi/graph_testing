@@ -164,7 +164,6 @@ def main():
         pr_value_list.append(pr_value)
         hits_value_list.append(hits_value)
 
-
     dic = {
         'Random': random_value_list,
         'Degree': degree_value_list,
@@ -175,7 +174,7 @@ def main():
         'PageRank': pr_value_list,
         'Hits': hits_value_list,
     }
-    print(dic)
+
     json.dump(dic, open(path_save, 'w'), sort_keys=True, indent=4)
 
 
