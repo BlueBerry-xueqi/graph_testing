@@ -177,4 +177,7 @@ feature_time.py
 time_cost.py
 models/*
 results/*
+data/*
+nodeImportance_retraining/target_models/*
+nodeImportance_retraining/result/*
 

@@ -1,10 +1,10 @@
 import torch.nn.functional as F
-from importance_rank_idx import *
-from utils import *
 import pickle
 import networkx as nx
 import json
 import torch
+from importance_rank_idx import *
+from utils import *
 
 import argparse
 ap = argparse.ArgumentParser()
@@ -32,7 +32,7 @@ target_hidden_channel = 16
 hidden_channel = 16
 
 epochs = 5
-ratio = 0.1
+ratio = 0.3
 
 num_node_features, num_classes, x, edge_index, y, test_y, train_all_idx, test_idx = load_data(path_x, path_edge_index,
                                                                                               path_y)
