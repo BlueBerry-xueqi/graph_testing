@@ -27,8 +27,8 @@ path_save = args.path_save
 
 target_hidden_channel = 16
 hidden_channel = 16
-epochs = 5
-ratio = 0.3
+epochs_list = [5, 6, 7, 8, 9, 10, 11, 12]
+ratio_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
 num_node_features, num_classes, x, edge_index, y, test_y, train_all_idx, test_idx = load_data(path_x, path_edge_index, path_y)
 train_idx, candidate_idx, train_y, candidate_y = train_test_split(train_all_idx, y[train_all_idx], test_size=0.5,random_state=17)
@@ -81,14 +81,14 @@ def get_model(model_name, num_node_features, hidden_channel, num_classes):
     return model
 
 
-def get_retrain(rank_list, x, y, edge_index):
+def get_retrain(rank_list, x, y, edge_index, ratio, epochs):
 
     x = x.to(device)
     edge_index = edge_index.to(device)
     y = y.to(device)
 
     acc_list = []
-    for s in range(10):
+    for s in range(5):
         model = get_model(model_name, num_node_features, hidden_channel, num_classes)
         model.load_state_dict(torch.load(target_model_path))
         model = model.to(device)
@@ -133,25 +133,47 @@ def main():
     pr_rank_idx = PageRank_rank_idx(G_degree, candidate_idx)
     hits_rank_idx = Hits_rank_idx(G_degree, candidate_idx)
 
-    random_value = get_retrain(random_rank_idx, x, y, edge_index)
+    random_value_list = []
+    degree_value_list = []
+    eccentricity_value_list = []
+    center_value_list = []
+    bc_value_list = []
+    ec_value_list = []
+    pr_value_list = []
+    hits_value_list = []
 
-    degree_value = get_retrain(degree_rank_idx, x, y, edge_index)
-    eccentricity_value = get_retrain(eccentricity_rank_idx, x, y, edge_index)
-    center_value = get_retrain(center_rank_idx, x, y, edge_index)
-    bc_value = get_retrain(bc_rank_idx, x, y, edge_index)
-    ec_value = get_retrain(ec_rank_idx, x, y, edge_index)
-    pr_value = get_retrain(pr_rank_idx, x, y, edge_index)
-    hits_value = get_retrain(hits_rank_idx, x, y, edge_index)
+    for i in range(len(ratio_list)):
+        ratio = ratio_list[i]
+        epochs = epochs_list[i]
+
+        random_value = get_retrain(random_rank_idx, x, y, edge_index, ratio, epochs)
+        degree_value = get_retrain(degree_rank_idx, x, y, edge_index, ratio)
+        eccentricity_value = get_retrain(eccentricity_rank_idx, x, y, edge_index, ratio, epochs)
+        center_value = get_retrain(center_rank_idx, x, y, edge_index, ratio, epochs)
+        bc_value = get_retrain(bc_rank_idx, x, y, edge_index, ratio, epochs)
+        ec_value = get_retrain(ec_rank_idx, x, y, edge_index, ratio, epochs)
+        pr_value = get_retrain(pr_rank_idx, x, y, edge_index, ratio, epochs)
+        hits_value = get_retrain(hits_rank_idx, x, y, edge_index, ratio, epochs)
+
+        random_value_list.append(random_value)
+        degree_value_list.append(degree_value)
+        eccentricity_value_list.append(eccentricity_value)
+        center_value_list.append(center_value)
+        bc_value_list.append(bc_value)
+        ec_value_list.append(ec_value)
+        pr_value_list.append(pr_value)
+        hits_value_list.append(hits_value)
+
 
     dic = {
-        'Random': random_value,
-        'Degree': degree_value,
-        'Eccentricity': eccentricity_value,
-        'Center': center_value,
-        'BC': bc_value,
-        'EC': ec_value,
-        'PageRank': pr_value,
-        'Hits': hits_value,
+        'Random': random_value_list,
+        'Degree': degree_value_list,
+        'Eccentricity': eccentricity_value_list,
+        'Center': center_value_list,
+        'BC': bc_value_list,
+        'EC': ec_value_list,
+        'PageRank': pr_value_list,
+        'Hits': hits_value_list,
     }
     print(dic)
     json.dump(dic, open(path_save, 'w'), sort_keys=True, indent=4)
