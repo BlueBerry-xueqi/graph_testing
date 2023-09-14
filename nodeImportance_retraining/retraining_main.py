@@ -165,14 +165,14 @@ def main():
         hits_value_list.append(hits_value)
 
     dic = {
-        'Random': random_value_list,
-        'Degree': degree_value_list,
-        'Eccentricity': eccentricity_value_list,
-        'Center': center_value_list,
-        'BC': bc_value_list,
-        'EC': ec_value_list,
-        'PageRank': pr_value_list,
-        'Hits': hits_value_list,
+        'Random': str(random_value_list),
+        'Degree': str(degree_value_list),
+        'Eccentricity': str(eccentricity_value_list),
+        'Center': str(center_value_list),
+        'BC': str(bc_value_list),
+        'EC': str(ec_value_list),
+        'PageRank': str(pr_value_list),
+        'Hits': str(hits_value_list)
     }
 
     json.dump(dic, open(path_save, 'w'), sort_keys=True, indent=4)
