@@ -1,12 +1,6 @@
 # Source Code of Graph Testing
-## Requirements
+## Main Requirements
 - PyTorch 
+- PyTorch Geometric
 - scikit-learn
-- PyTorch Geometric 
-
-
-
-
-
-
-
+- networkx

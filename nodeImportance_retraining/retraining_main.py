@@ -25,23 +25,14 @@ path_edge_index = args.path_edge_index
 path_y = args.path_y
 path_save = args.path_save
 
-# python retraining_main.py --cuda 'cuda:1' --model_name 'gcn' --target_model_path './target_models/cora_gcn.pt' --path_x '../data/cora/x_np.pkl' --path_edge_index '../data/cora/edge_index_np.pkl' --path_y '../data/cora/y_np.pkl' --path_save './result/cora_gcn.json'
-
-
 target_hidden_channel = 16
 hidden_channel = 16
-
 epochs = 5
 ratio = 0.3
 
-num_node_features, num_classes, x, edge_index, y, test_y, train_all_idx, test_idx = load_data(path_x, path_edge_index,
-                                                                                              path_y)
-
-train_idx, candidate_idx, train_y, candidate_y = train_test_split(train_all_idx, y[train_all_idx], test_size=0.5,
-                                                                  random_state=17)
-
+num_node_features, num_classes, x, edge_index, y, test_y, train_all_idx, test_idx = load_data(path_x, path_edge_index, path_y)
+train_idx, candidate_idx, train_y, candidate_y = train_test_split(train_all_idx, y[train_all_idx], test_size=0.5,random_state=17)
 target_model = load_target_model(model_name, num_node_features, target_hidden_channel, num_classes, target_model_path)
-
 device = torch.device(cuda if torch.cuda.is_available() else 'cpu')
 
 
