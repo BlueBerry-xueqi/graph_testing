@@ -147,7 +147,7 @@ def main():
         epochs = epochs_list[i]
 
         random_value = get_retrain(random_rank_idx, x, y, edge_index, ratio, epochs)
-        degree_value = get_retrain(degree_rank_idx, x, y, edge_index, ratio)
+        degree_value = get_retrain(degree_rank_idx, x, y, edge_index, ratio, epochs)
         eccentricity_value = get_retrain(eccentricity_rank_idx, x, y, edge_index, ratio, epochs)
         center_value = get_retrain(center_rank_idx, x, y, edge_index, ratio, epochs)
         bc_value = get_retrain(bc_rank_idx, x, y, edge_index, ratio, epochs)
