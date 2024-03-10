@@ -183,3 +183,4 @@ nodeImportance_retraining/result/*
 Plot.ipynb
 nodeImportance_retraining/result_distribution/*
 AllPlot.ipynb
+pic/*
