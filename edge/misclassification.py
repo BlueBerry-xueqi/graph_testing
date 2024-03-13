@@ -43,6 +43,12 @@ def get_res_ratio_list(idx_miss_list, select_idx_list, select_ratio_list):
     return res_ratio_list
 
 
+def write_result(content, file_name):
+    re = open(file_name, 'a')
+    re.write('\n' + content)
+    re.close()
+
+
 def main():
     x = pickle.load(open(path_x, 'rb'))
     edge_index = pickle.load(open(path_edge_index, 'rb'))
