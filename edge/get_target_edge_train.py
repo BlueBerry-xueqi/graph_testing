@@ -7,16 +7,15 @@ from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 from edge_models import GraphSAGEdge, TAGCNEdge
 
-path_x = './data/DrugBank/x_np.pkl'
-path_edge_index = './data/DrugBank/edge_index_np.pkl'
-path_y = './data/DrugBank/y_np.pkl'
+path_x = './data/BindingDB/x_np.pkl'
+path_edge_index = './data/BindingDB/edge_index_np.pkl'
+path_y = './data/BindingDB/y_np.pkl'
 model_name = 'tagcnEdge'
-epochs = 600
-path_save_model = './edge_model/DrugBank_tagcnEdge.pt'
+epochs = 100
+path_save_model = './edge_model/BindingDB_tagcnEdge.pt'
 
 
 def get_model(model_name, num_node_features, num_classes):
-
     if model_name == 'graphsageEdge':
         model = GraphSAGEdge(num_node_features, num_classes)
     elif model_name == 'tagcnEdge':
