@@ -110,7 +110,7 @@ def main():
     pre_y_test = np.argmax(test_pre_vec, axis=1)
     y_test = y[test_idx]
 
-    select_n_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+    select_n_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
     dic = {'GMM': [],
            'Hierarchical': [],
            'KMeans': [],
@@ -158,10 +158,10 @@ def main():
         # dic['Hierarchical'].append(np.sqrt(Hierarchical_diff / epochs))
         # dic['GMM'].append(np.sqrt(GMM_diff / epochs))
 
-        for i in range(1000):
+        for i in range(100):
             idx_list = random.sample(range(len(test_pre_vec)), select_n)
             Random_diff += np.power((accuracy_score(pre_y_test[idx_list], y_test[idx_list]) - acc), 2)
-        dic['Random'].append(np.sqrt(Random_diff / 1000))
+        dic['Random'].append(np.sqrt(Random_diff / 100))
 
         print(dic)
 
