@@ -6,4 +6,4 @@
 - networkx
 
 ## Dataset
-- Cora https://graphsandnetworks.com/the-cora-dataset/
+- Cora [https://graphsandnetworks.com/the-cora-dataset/](https://graphsandnetworks.com/the-cora-dataset/)
