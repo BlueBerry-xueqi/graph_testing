@@ -4,3 +4,6 @@
 - PyTorch Geometric
 - scikit-learn
 - networkx
+
+## Dataset
+- Cora https://graphsandnetworks.com/the-cora-dataset/
