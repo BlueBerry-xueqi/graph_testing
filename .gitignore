@@ -176,7 +176,8 @@ feature_time.py
 *.pptx
 time_cost.py
 models/*
-results/*
+results/all_experiment_result_old/*
+results/all_results/*
 data/*
 nodeImportance_retraining/target_models/*
 nodeImportance_retraining/result/*
