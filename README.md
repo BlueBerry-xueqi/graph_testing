@@ -59,6 +59,3 @@ We provide an example below to run the code.
 
 ### results
 The file 'results' includes the experimental results for the empirical study.
-
-
-
