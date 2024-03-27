@@ -22,33 +22,39 @@
 The file 'cluster_metrics' contains the code for clustering-based test selection metrics.
 
 ### cluster_uncertaity_retraining
-The file 'cluster_uncertainty_retraining' contains the code for GNN model retraining including using the misclassification detection methods and accuracy estimation methods for retraining. 
-#### We provide an example below to run the code 
+The file 'cluster_uncertainty_retraining' contains the code for GNN model retraining including using the misclassification detection methods and accuracy estimation methods for retraining.  
+We provide an example below to run the code.
+
     python selection_PubMed.py --type ARMA --metrics deepgini --select_ratio 5 --exp 3 --retrain_epochs 20
 
 ### edge 
-The file 'edge' contains code for the edge task, including misclassification detection and accuracy estimation.
-#### How to run misclassification detection
+The file 'edge' contains code for the edge task, including misclassification detection and accuracy estimation.    
+How to run misclassification detection    
+    
     python misclassification.py
-#### How to run accuracy estimation
+How to run accuracy estimation  
+
     python estimation.py --path_model './edge_model/BindingDB_graphsageEdge.pt' --path_x './data/BindingDB/x_np.pkl' --path_edge_index './data/BindingDB/edge_index_np.pkl' --path_y './data/BindingDB/y_np.pkl' --model_name 'graphsageEdge' --save_path './result/estimation_2_BindingDB_graphsageEdge.json' --epochs 10
 
 ### estimation
-The file 'estimation' contains the code for GNN accuracy estimation. 
-#### We provide an example below to run the code 
+The file 'estimation' contains the code for GNN accuracy estimation.    
+We provide an example below to run the code. 
+
     python selection_PubMed.py --type AGNN --metrics kmeans --select_ratio 5 --exp 3 --retrain_epochs 20
 
 ### misclassification
-The file 'misclassification' contains the code for GNN misclassification detection. 
-#### We provide an example below to run the code 
-     python selection_Cora.py --type GCN --metrics kmeans --select_ratio 5 --exp 3 --retrain_epochs 20
+The file 'misclassification' contains the code for GNN misclassification detection.   
+We provide an example below to run the code 
+
+    python selection_Cora.py --type GCN --metrics kmeans --select_ratio 5 --exp 3 --retrain_epochs 20
 
 ### geometric_models
 The file 'geometric_models' includes the GNN model used to evaluate the test selection methods.
 
 ### nodelmportance_retraining
-The file 'nodelmportance_retraining' includes the code for GNN model retraining task using node importance metric.
-#### How to run
+The file 'nodelmportance_retraining' includes the code for GNN model retraining task using node importance metric.    
+We provide an example below to run the code.
+
     sh start_retrain.sh
 
 ### results
