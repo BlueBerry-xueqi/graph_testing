@@ -15,24 +15,37 @@
 - MSRC21    https://chrsmrrs.github.io/datasets/docs/datasets/
 - DrugBank  https://tdcommons.ai/multi_pred_tasks/ddi/
 - BindingDB https://tdcommons.ai/multi_pred_tasks/dti/
-## cluster_metrics
 
-## cluster_uncertaity_retraining
+## File 
 
-## edge 
+### cluster_metrics
+The file cluster_metrics contains all the code for clustering-based test selection metrics.
+
+### cluster_uncertaity_retraining
+The file cluster_uncertainty_retraining contains all the code for RQ3 (GNN model retraining). 
+
+### edge 
 The file 'edge' contains code for the edge task, including misclassification detection and accuracy estimation.
 #### How to run misclassification detection
     python misclassification.py
 #### How to run accuracy estimation
     python estimation.py --path_model './edge_model/BindingDB_graphsageEdge.pt' --path_x './data/BindingDB/x_np.pkl' --path_edge_index './data/BindingDB/edge_index_np.pkl' --path_y './data/BindingDB/y_np.pkl' --model_name 'graphsageEdge' --save_path './result/estimation_2_BindingDB_graphsageEdge.json' --epochs 10
 
-## estimation
+### estimation
+The file cluster_uncertainty_retraining contains all the code for RQ2 (GNN accuracy estimation). 
 
-## misclassification
 
-## models/geometric_models
+### misclassification
+The file cluster_uncertainty_retraining contains all the code for RQ1 (GNN misclassification detection). 
 
-## nodelmportance_retraining
-## results
+
+### models/geometric_models
+The file includes the GNN model used to evaluate the test selection methods.
+
+### nodelmportance_retraining
+
+### results
+The file contains the experimental results for the empirical study.
+
 
 
