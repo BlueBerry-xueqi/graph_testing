@@ -18,10 +18,10 @@
 
 ## File 
 
-### cluster_metrics
+- cluster_metrics
 The file cluster_metrics contains all the code for clustering-based test selection metrics.
 
-### cluster_uncertaity_retraining
+- cluster_uncertaity_retraining
 The file cluster_uncertainty_retraining contains all the code for RQ3 (GNN model retraining). 
 
 ### edge 
