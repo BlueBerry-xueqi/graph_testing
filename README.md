@@ -25,7 +25,7 @@ The file cluster_metrics contains all the code for clustering-based test selecti
 The file cluster_uncertainty_retraining contains all the code for RQ3 (GNN model retraining), including using the misclassification detection methods and accuracy estimation method for retraining. 
 #### How to run 
     python selection_[#datasetName].py --type [model name] --metrics [selection method name] --select_ratio [#selection ratio] --exp [#number] --retrain_epochs [#number]
-    We provide an example below. 
+We provide an example below. 
     python selection_PubMed.py --type ARMA --metrics deepgini --select_ratio 5 --exp 3 --retrain_epochs 20
 
 ### edge 
@@ -38,7 +38,7 @@ The file 'edge' contains code for the edge task, including misclassification det
 ### estimation
 The file cluster_uncertainty_retraining contains all the code for RQ2 (GNN accuracy estimation). 
 #### How to run 
-    We provide an example below. 
+We provide an example below. 
     python selection_PubMed.py --type AGNN --metrics kmeans --select_ratio 5 --exp 3 --retrain_epochs 20
 
 
@@ -46,7 +46,7 @@ The file cluster_uncertainty_retraining contains all the code for RQ2 (GNN accur
 ### misclassification
 The file cluster_uncertainty_retraining contains all the code for RQ1 (GNN misclassification detection). 
 #### How to run 
-     We provide an example below. 
+We provide an example below. 
      python selection_Cora.py --type GCN --metrics kmeans --select_ratio 5 --exp 3 --retrain_epochs 20
 
 
